@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Wrench, Package, DollarSign, Plus, Edit, Trash2, Save } from 'lucide-react';
+import { Wrench, Package, DollarSign, Plus, Edit, Trash2 } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 

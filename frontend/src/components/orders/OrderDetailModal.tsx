@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Printer, Clock, User, Car, DollarSign, Package, Wrench, History, Play, CheckCircle, AlertCircle, XCircle, RotateCcw } from 'lucide-react';
+import { X, Printer, Clock, User, Car, DollarSign, Package, Wrench, Play, CheckCircle, AlertCircle, XCircle, RotateCcw } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 

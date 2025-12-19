@@ -1,8 +1,15 @@
 import { useState } from 'react';
-import { Search, Bell, User } from 'lucide-react';
+import { Search, Bell, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
-const Header = () => {
+interface HeaderProps {
+  isCollapsed: boolean;
+  onToggleSidebar: () => void;
+  isMobile?: boolean;
+  isMobileMenuOpen?: boolean;
+}
+
+const Header = ({ isCollapsed, onToggleSidebar, isMobile = false, isMobileMenuOpen = false }: HeaderProps) => {
   const { user } = useAuth();
   const [notifications] = useState(3); // Mock - depois virá da API
 
@@ -28,15 +35,68 @@ const Header = () => {
         position: 'sticky',
         top: 0,
         zIndex: 100,
-        marginLeft: '260px',
+        marginLeft: 0,
+        transition: 'margin-left 0.3s ease-in-out',
       }}
     >
+      {/* Menu Toggle Button */}
+      <button
+        onClick={onToggleSidebar}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: isMobile ? '44px' : '40px',
+          height: isMobile ? '44px' : '40px',
+          borderRadius: '8px',
+          border: '1px solid #e2e8f0',
+          backgroundColor: 'white',
+          cursor: 'pointer',
+          color: '#64748b',
+          transition: 'all 0.2s',
+          marginRight: '1rem',
+          flexShrink: 0,
+        }}
+        onMouseEnter={(e) => {
+          if (!isMobile) {
+            e.currentTarget.style.backgroundColor = '#f8fafc';
+            e.currentTarget.style.borderColor = '#f97316';
+            e.currentTarget.style.color = '#f97316';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isMobile) {
+            e.currentTarget.style.backgroundColor = 'white';
+            e.currentTarget.style.borderColor = '#e2e8f0';
+            e.currentTarget.style.color = '#64748b';
+          }
+        }}
+        onTouchStart={(e) => {
+          e.currentTarget.style.backgroundColor = '#f8fafc';
+        }}
+        onTouchEnd={(e) => {
+          setTimeout(() => {
+            e.currentTarget.style.backgroundColor = 'white';
+          }, 200);
+        }}
+        title={isMobile ? 'Abrir menu' : (isCollapsed ? 'Expandir menu' : 'Recolher menu')}
+        aria-label={isMobile ? 'Abrir menu de navegação' : (isCollapsed ? 'Expandir menu' : 'Recolher menu')}
+        aria-expanded={isMobile ? isMobileMenuOpen : undefined}
+      >
+        {isMobile ? (
+          <Menu size={20} />
+        ) : (
+          isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />
+        )}
+      </button>
       {/* Search */}
       <div
         style={{
           position: 'relative',
           flex: 1,
-          maxWidth: '400px',
+          maxWidth: isMobile ? '100%' : '400px',
+          marginLeft: '0',
+          minWidth: 0, // Prevents flex item from overflowing
         }}
       >
         <Search
@@ -54,11 +114,12 @@ const Header = () => {
           placeholder="Buscar..."
           style={{
             width: '100%',
-            padding: '0.75rem 1rem 0.75rem 2.5rem',
+            padding: isMobile ? '0.875rem 1rem 0.875rem 2.5rem' : '0.75rem 1rem 0.75rem 2.5rem',
             border: '1px solid #e2e8f0',
             borderRadius: '8px',
-            fontSize: '0.9rem',
+            fontSize: isMobile ? '16px' : '0.9rem', // Prevents zoom on iOS
             outline: 'none',
+            minHeight: '44px', // Touch-friendly
           }}
           onFocus={(e) => {
             e.target.style.borderColor = '#f97316';
@@ -66,6 +127,7 @@ const Header = () => {
           onBlur={(e) => {
             e.target.style.borderColor = '#e2e8f0';
           }}
+          aria-label="Buscar"
         />
       </div>
 
@@ -74,7 +136,8 @@ const Header = () => {
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '1.5rem',
+          gap: isMobile ? '0.75rem' : '1.5rem',
+          flexShrink: 0,
         }}
       >
         {/* Notifications */}
@@ -119,8 +182,8 @@ const Header = () => {
         >
           <div
             style={{
-              width: '40px',
-              height: '40px',
+              width: isMobile ? '36px' : '40px',
+              height: isMobile ? '36px' : '40px',
               borderRadius: '50%',
               backgroundColor: '#f97316',
               color: 'white',
@@ -128,11 +191,14 @@ const Header = () => {
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 'bold',
-              fontSize: '0.9rem',
+              fontSize: isMobile ? '0.8rem' : '0.9rem',
+              flexShrink: 0,
             }}
+            aria-label={`Usuário: ${user?.name || 'Admin'}`}
           >
             {user ? getInitials(user.name) : 'AD'}
           </div>
+          {!isMobile && (
           <div>
             <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>
               {user?.name || 'Admin'}
@@ -141,6 +207,7 @@ const Header = () => {
               {user?.profile === 'admin' ? 'Administrador' : user?.profile}
             </div>
           </div>
+          )}
         </div>
       </div>
     </header>

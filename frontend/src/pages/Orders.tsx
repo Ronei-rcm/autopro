@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, FileText, User, Car, Wrench, Package, DollarSign, X, Eye, BarChart3, CheckCircle, Clock } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, FileText, Car, Wrench, Package, DollarSign, X, Eye, CheckCircle, Clock } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import OrderDetailModal from '../components/orders/OrderDetailModal';

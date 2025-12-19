@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Calendar, Clock, User, Car, CheckCircle, XCircle, Play, AlertCircle } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Calendar, Clock, User, Car, CheckCircle, XCircle, Play } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
@@ -240,17 +240,17 @@ const Appointments = () => {
     return labels[status] || status;
   };
 
-  const getAppointmentsByDate = () => {
-    const grouped: Record<string, Appointment[]> = {};
-    appointments.forEach((apt) => {
-      const date = new Date(apt.start_time).toLocaleDateString('pt-BR');
-      if (!grouped[date]) {
-        grouped[date] = [];
-      }
-      grouped[date].push(apt);
-    });
-    return grouped;
-  };
+  // const getAppointmentsByDate = () => {
+  //   const grouped: Record<string, Appointment[]> = {};
+  //   appointments.forEach((apt) => {
+  //     const date = new Date(apt.start_time).toLocaleDateString('pt-BR');
+  //     if (!grouped[date]) {
+  //       grouped[date] = [];
+  //     }
+  //     grouped[date].push(apt);
+  //   });
+  //   return grouped;
+  // };
 
   const getDaysInMonth = () => {
     const year = selectedDate.getFullYear();

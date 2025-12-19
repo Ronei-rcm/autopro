@@ -45,10 +45,18 @@ api.interceptors.response.use(
     // Melhorar mensagem de erro
     if (error.response) {
       // Erro da API
-      error.message = error.response.data?.error || error.response.data?.message || error.message;
+      if (error.response.status === 500) {
+        error.message = error.response.data?.error || 'Erro interno do servidor. Verifique se o backend está rodando corretamente.';
+      } else {
+        error.message = error.response.data?.error || error.response.data?.message || error.message;
+      }
     } else if (error.request) {
-      // Erro de rede
-      error.message = 'Erro de conexão. Verifique sua internet.';
+      // Erro de rede - servidor não respondeu
+      if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
+        error.message = 'Não foi possível conectar ao servidor. Verifique se o backend está rodando.';
+      } else {
+        error.message = 'Erro de conexão. Verifique sua internet.';
+      }
     }
     
     return Promise.reject(error);

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { FileText, DollarSign, TrendingUp, Package, Users, Calendar, Download, BarChart3, PieChart } from 'lucide-react';
+import { DollarSign, TrendingUp, Package, Users, Calendar, BarChart3, PieChart } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
-import { LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, BarChart, Bar, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface ReportData {
   period?: { start: string; end: string };
@@ -359,7 +359,7 @@ const Reports = () => {
                 </tr>
               </thead>
               <tbody>
-                {topClients.map((c: any, index: number) => (
+                {topClients.map((c: any) => (
                   <tr key={c.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
                     <td style={{ padding: '0.75rem' }}>{c.name}</td>
                     <td style={{ padding: '0.75rem' }}>{c.type === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica'}</td>

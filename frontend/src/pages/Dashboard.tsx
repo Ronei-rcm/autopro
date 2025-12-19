@@ -98,23 +98,30 @@ const Dashboard = () => {
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '0.5rem' }}>
+      <header style={{ marginBottom: '2rem' }}>
+        <h1 style={{ 
+          fontSize: 'clamp(1.5rem, 4vw, 1.875rem)', 
+          fontWeight: 'bold', 
+          color: '#1e293b', 
+          marginBottom: '0.5rem',
+          lineHeight: '1.2',
+        }}>
           Dashboard
         </h1>
-        <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
+        <p style={{ color: '#64748b', fontSize: 'clamp(0.875rem, 2vw, 0.9rem)' }}>
           Visão geral do seu negócio
         </p>
-      </div>
+      </header>
 
       {/* KPIs */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '1.5rem',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: '1rem',
           marginBottom: '2rem',
         }}
+        className="dashboard-kpis"
       >
         <KPICard
           title="Clientes"
@@ -176,10 +183,11 @@ const Dashboard = () => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-          gap: '1.5rem',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: '1rem',
           marginBottom: '1.5rem',
         }}
+        className="dashboard-charts"
       >
         {/* Receita dos Últimos 6 Meses */}
         <div
@@ -234,10 +242,11 @@ const Dashboard = () => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-          gap: '1.5rem',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: '1rem',
           marginBottom: '1.5rem',
         }}
+        className="dashboard-charts"
       >
         {/* Vendas dos Últimos 7 Dias */}
         <div
@@ -329,7 +338,7 @@ const Dashboard = () => {
           <TrendingUp size={18} color="#3b82f6" />
           Comparação Mensal
         </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
           <div style={{ padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
             <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.5rem' }}>Receita - Mês Atual</div>
             <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b' }}>

@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Bot, User } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { MessageCircle, X, Send, Bot } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
