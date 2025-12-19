@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
-import { DollarSign, TrendingUp, Package, Users, Calendar, BarChart3, PieChart } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { DollarSign, TrendingUp, Package, Users, Calendar, BarChart3, PieChart, Download } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import SkeletonLoader from '../components/common/SkeletonLoader';
 import { LineChart, Line, BarChart, Bar, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface ReportData {
   period?: { start: string; end: string };
@@ -17,6 +20,8 @@ const Reports = () => {
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadReport();
@@ -45,6 +50,83 @@ const Reports = () => {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR');
+  };
+
+  const getReportTitle = () => {
+    const titles: Record<string, string> = {
+      overview: 'Visão Geral',
+      financial: 'Relatório Financeiro',
+      sales: 'Relatório de Vendas',
+      inventory: 'Relatório de Estoque',
+      clients: 'Relatório de Clientes',
+    };
+    return titles[activeReport] || 'Relatório';
+  };
+
+  const exportToPDF = async () => {
+    if (!reportRef.current) {
+      toast.error('Nenhum conteúdo para exportar');
+      return;
+    }
+
+    try {
+      setExporting(true);
+      toast.loading('Gerando PDF...', { id: 'export-pdf' });
+
+      // Capturar o conteúdo do relatório
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      
+      // Criar PDF
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // Adicionar título
+      pdf.setFontSize(18);
+      pdf.setTextColor(30, 41, 59);
+      pdf.text(getReportTitle(), 105, 15, { align: 'center' });
+      
+      pdf.setFontSize(10);
+      pdf.setTextColor(100, 116, 139);
+      const periodText = `Período: ${formatDate(startDate)} a ${formatDate(endDate)}`;
+      pdf.text(periodText, 105, 22, { align: 'center' });
+      
+      pdf.setFontSize(8);
+      const dateText = `Gerado em: ${new Date().toLocaleString('pt-BR')}`;
+      pdf.text(dateText, 105, 27, { align: 'center' });
+
+      // Adicionar imagem (pode ser múltiplas páginas)
+      pdf.addImage(imgData, 'PNG', 0, 30, imgWidth, imgHeight);
+      heightLeft -= pageHeight - 30;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      // Salvar PDF
+      const fileName = `${getReportTitle()}_${startDate}_${endDate}.pdf`.replace(/\s+/g, '_');
+      pdf.save(fileName);
+
+      toast.success('PDF gerado com sucesso!', { id: 'export-pdf' });
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      toast.error('Erro ao gerar PDF', { id: 'export-pdf' });
+    } finally {
+      setExporting(false);
+    }
   };
 
   const renderOverviewReport = () => {
@@ -492,18 +574,65 @@ const Reports = () => {
         })}
       </div>
 
-      {/* Report Content */}
-      {loading ? (
-        <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>Carregando relatório...</div>
-      ) : (
-        <>
-          {activeReport === 'overview' && renderOverviewReport()}
-          {activeReport === 'financial' && renderFinancialReport()}
-          {activeReport === 'sales' && renderSalesReport()}
-          {activeReport === 'inventory' && renderInventoryReport()}
-          {activeReport === 'clients' && renderClientsReport()}
-        </>
+      {/* Export Button */}
+      {!loading && reportData && (
+        <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={exportToPDF}
+            disabled={exporting}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.75rem 1.5rem',
+              backgroundColor: '#f97316',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: exporting ? 'not-allowed' : 'pointer',
+              opacity: exporting ? 0.6 : 1,
+              fontWeight: '600',
+              fontSize: '0.9rem',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              if (!exporting) {
+                e.currentTarget.style.backgroundColor = '#ea580c';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!exporting) {
+                e.currentTarget.style.backgroundColor = '#f97316';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }
+            }}
+          >
+            <Download size={18} />
+            {exporting ? 'Gerando PDF...' : 'Exportar PDF'}
+          </button>
+        </div>
       )}
+
+      {/* Report Content */}
+      <div ref={reportRef}>
+        {loading ? (
+          <div>
+            <SkeletonLoader type="card" />
+            <div style={{ marginTop: '1rem' }}>
+              <SkeletonLoader type="card" />
+            </div>
+          </div>
+        ) : (
+          <>
+            {activeReport === 'overview' && renderOverviewReport()}
+            {activeReport === 'financial' && renderFinancialReport()}
+            {activeReport === 'sales' && renderSalesReport()}
+            {activeReport === 'inventory' && renderInventoryReport()}
+            {activeReport === 'clients' && renderClientsReport()}
+          </>
+        )}
+      </div>
     </div>
   );
 };

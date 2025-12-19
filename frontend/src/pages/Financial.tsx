@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { DollarSign, TrendingUp, TrendingDown, Plus, Edit, Trash2 } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import SkeletonLoader from '../components/common/SkeletonLoader';
 
 interface Payable {
   id: number;
@@ -339,7 +340,7 @@ const Financial = () => {
       {activeTab === 'dashboard' && (
         <div>
           {loading ? (
-            <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>Carregando...</div>
+            <SkeletonLoader type="card" />
           ) : dashboardData ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
               {/* Contas a Pagar */}
@@ -430,7 +431,7 @@ const Financial = () => {
 
           <div style={{ backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)', overflow: 'hidden' }}>
             {loading ? (
-              <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>Carregando...</div>
+              <SkeletonLoader type="table" />
             ) : payables.length === 0 ? (
               <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>Nenhuma conta a pagar encontrada</div>
             ) : (
@@ -558,7 +559,7 @@ const Financial = () => {
 
           <div style={{ backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)', overflow: 'hidden' }}>
             {loading ? (
-              <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>Carregando...</div>
+              <SkeletonLoader type="table" />
             ) : receivables.length === 0 ? (
               <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>Nenhuma conta a receber encontrada</div>
             ) : (

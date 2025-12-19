@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Users, FileText, DollarSign, Package, Calendar, TrendingUp, AlertTriangle, Clock } from 'lucide-react';
 import api from '../services/api';
 import KPICard from '../components/dashboard/KPICard';
+import SkeletonLoader from '../components/common/SkeletonLoader';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface DashboardData {
@@ -78,8 +79,32 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
-        Carregando dashboard...
+      <div>
+        <header style={{ marginBottom: '2rem' }}>
+          <SkeletonLoader type="text" lines={2} width="40%" height="32px" />
+        </header>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: '1rem',
+            marginBottom: '2rem',
+          }}
+        >
+          {Array.from({ length: 7 }).map((_, i) => (
+            <SkeletonLoader key={i} type="card" />
+          ))}
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+            gap: '1rem',
+          }}
+        >
+          <SkeletonLoader type="card" />
+          <SkeletonLoader type="card" />
+        </div>
       </div>
     );
   }

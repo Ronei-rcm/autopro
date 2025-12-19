@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, Package, AlertTriangle, TrendingUp, PackageCheck } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import SkeletonLoader from '../components/common/SkeletonLoader';
 
 interface Product {
   id: number;
@@ -328,9 +329,7 @@ const Inventory = () => {
         }}
       >
         {loading ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
-            Carregando...
-          </div>
+          <SkeletonLoader type="table" />
         ) : products.length === 0 ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
             Nenhum produto encontrado

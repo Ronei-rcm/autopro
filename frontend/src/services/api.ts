@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 // Usa o proxy do Vite em desenvolvimento, ou a URL configurada em produção
 const getBaseURL = () => {
@@ -31,10 +31,31 @@ api.interceptors.request.use(
   }
 );
 
-// Interceptor para tratar erros
+
+// Retry logic para requisições falhadas
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 segundo
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Interceptor para tratar erros e retry automático
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error: AxiosError) => {
+    const config = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _retryCount?: number };
+    
+    // Retry automático apenas para erros de rede (sem resposta do servidor)
+    if (!error.response && error.request && config && !config._retry) {
+      config._retry = true;
+      config._retryCount = (config._retryCount || 0) + 1;
+
+      if (config._retryCount <= MAX_RETRIES) {
+        console.log(`🔄 Tentativa ${config._retryCount} de ${MAX_RETRIES} para ${config.url}`);
+        await sleep(RETRY_DELAY * config._retryCount); // Backoff exponencial
+        return api.request(config);
+      }
+    }
+
     // Não redirecionar se já estiver na página de login
     if (error.response?.status === 401 && !window.location.pathname.includes('/login')) {
       localStorage.removeItem('token');
@@ -43,19 +64,20 @@ api.interceptors.response.use(
     }
     
     // Melhorar mensagem de erro
+    const axiosError = error as AxiosError & { message?: string; code?: string };
     if (error.response) {
       // Erro da API
       if (error.response.status === 500) {
-        error.message = error.response.data?.error || 'Erro interno do servidor. Verifique se o backend está rodando corretamente.';
+        axiosError.message = (error.response.data as any)?.error || 'Erro interno do servidor. Verifique se o backend está rodando corretamente.';
       } else {
-        error.message = error.response.data?.error || error.response.data?.message || error.message;
+        axiosError.message = (error.response.data as any)?.error || (error.response.data as any)?.message || axiosError.message || 'Erro desconhecido';
       }
     } else if (error.request) {
       // Erro de rede - servidor não respondeu
-      if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
-        error.message = 'Não foi possível conectar ao servidor. Verifique se o backend está rodando.';
+      if (axiosError.code === 'ECONNREFUSED' || axiosError.message?.includes('Network Error')) {
+        axiosError.message = 'Não foi possível conectar ao servidor. Verifique se o backend está rodando.';
       } else {
-        error.message = 'Erro de conexão. Verifique sua internet.';
+        axiosError.message = 'Erro de conexão. Verifique sua internet.';
       }
     }
     

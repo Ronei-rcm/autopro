@@ -9,6 +9,19 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'chart-vendor': ['recharts'],
+          'pdf-vendor': ['jspdf', 'html2canvas'],
+          'ui-vendor': ['lucide-react', 'react-hot-toast'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000,
+  },
   server: {
     port: 5173,
     host: '0.0.0.0', // Permite acesso de qualquer IP

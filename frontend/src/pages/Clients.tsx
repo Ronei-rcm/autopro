@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Search, Edit, Trash2, User, Building2, Phone, Mail } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import SkeletonLoader from '../components/common/SkeletonLoader';
+import AdvancedFilters from '../components/common/AdvancedFilters';
+import Pagination from '../components/common/Pagination';
 
 interface Client {
   id: number;
@@ -20,6 +23,9 @@ const Clients = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formData, setFormData] = useState({
@@ -42,12 +48,16 @@ const Clients = () => {
 
   useEffect(() => {
     loadClients();
-  }, [search]);
+  }, [search, filters]);
 
   const loadClients = async () => {
     try {
       setLoading(true);
-      const params = search ? { search } : {};
+      const params: Record<string, string> = {};
+      if (search) params.search = search;
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) params[key] = value;
+      });
       const response = await api.get('/clients', { params });
       setClients(response.data);
     } catch (error: any) {
@@ -57,6 +67,31 @@ const Clients = () => {
       setLoading(false);
     }
   };
+
+  // Filtrar clientes localmente também (para filtros que não estão no backend)
+  const filteredClients = useMemo(() => {
+    return clients.filter((client) => {
+      if (filters.type && client.type !== filters.type) return false;
+      if (filters.active !== undefined) {
+        const isActive = filters.active === 'true';
+        if (client.active !== isActive) return false;
+      }
+      return true;
+    });
+  }, [clients, filters]);
+
+  // Paginação
+  const paginatedClients = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredClients.slice(startIndex, endIndex);
+  }, [filteredClients, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
+
+  useEffect(() => {
+    setCurrentPage(1); // Reset para primeira página quando filtros mudarem
+  }, [filters, search]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,7 +213,7 @@ const Clients = () => {
 
       {/* Search */}
       <div style={{ marginBottom: '1.5rem' }}>
-        <div style={{ position: 'relative', maxWidth: '400px' }}>
+        <div style={{ position: 'relative', maxWidth: '400px', marginBottom: '1rem' }}>
           <Search
             size={20}
             style={{
@@ -204,6 +239,29 @@ const Clients = () => {
             }}
           />
         </div>
+
+        {/* Advanced Filters */}
+        <AdvancedFilters
+          filters={{
+            type: {
+              label: 'Tipo',
+              type: 'select',
+              options: [
+                { label: 'Pessoa Física', value: 'PF' },
+                { label: 'Pessoa Jurídica', value: 'PJ' },
+              ],
+            },
+            active: {
+              label: 'Status',
+              type: 'select',
+              options: [
+                { label: 'Ativo', value: 'true' },
+                { label: 'Inativo', value: 'false' },
+              ],
+            },
+          }}
+          onFilterChange={setFilters}
+        />
       </div>
 
       {/* Table */}
@@ -216,10 +274,8 @@ const Clients = () => {
         }}
       >
         {loading ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
-            Carregando...
-          </div>
-        ) : clients.length === 0 ? (
+          <SkeletonLoader type="table" />
+        ) : filteredClients.length === 0 ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
             Nenhum cliente encontrado
           </div>
@@ -245,7 +301,7 @@ const Clients = () => {
               </tr>
             </thead>
             <tbody>
-              {clients.map((client) => (
+              {paginatedClients.map((client) => (
                 <tr
                   key={client.id}
                   style={{
@@ -347,6 +403,17 @@ const Clients = () => {
               ))}
             </tbody>
           </table>
+        )}
+
+        {/* Pagination */}
+        {!loading && filteredClients.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            totalItems={filteredClients.length}
+            itemsPerPage={itemsPerPage}
+          />
         )}
       </div>
 

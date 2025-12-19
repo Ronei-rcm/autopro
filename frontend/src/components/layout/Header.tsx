@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Search, Bell, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
+import { Bell, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import GlobalSearch from '../common/GlobalSearch';
 
 interface HeaderProps {
   isCollapsed: boolean;
@@ -89,47 +90,8 @@ const Header = ({ isCollapsed, onToggleSidebar, isMobile = false, isMobileMenuOp
           isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />
         )}
       </button>
-      {/* Search */}
-      <div
-        style={{
-          position: 'relative',
-          flex: 1,
-          maxWidth: isMobile ? '100%' : '400px',
-          marginLeft: '0',
-          minWidth: 0, // Prevents flex item from overflowing
-        }}
-      >
-        <Search
-          size={20}
-          style={{
-            position: 'absolute',
-            left: '12px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: '#64748b',
-          }}
-        />
-        <input
-          type="text"
-          placeholder="Buscar..."
-          style={{
-            width: '100%',
-            padding: isMobile ? '0.875rem 1rem 0.875rem 2.5rem' : '0.75rem 1rem 0.75rem 2.5rem',
-            border: '1px solid #e2e8f0',
-            borderRadius: '8px',
-            fontSize: isMobile ? '16px' : '0.9rem', // Prevents zoom on iOS
-            outline: 'none',
-            minHeight: '44px', // Touch-friendly
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = '#f97316';
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = '#e2e8f0';
-          }}
-          aria-label="Buscar"
-        />
-      </div>
+      {/* Global Search */}
+      {!isMobile && <GlobalSearch />}
 
       {/* Right side */}
       <div

@@ -3,6 +3,7 @@ import { Plus, Search, Edit, Trash2, FileText, Car, Wrench, Package, DollarSign,
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import OrderDetailModal from '../components/orders/OrderDetailModal';
+import SkeletonLoader from '../components/common/SkeletonLoader';
 
 interface Order {
   id: number;
@@ -531,9 +532,7 @@ const Orders = () => {
         }}
       >
         {loading ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
-            Carregando...
-          </div>
+          <SkeletonLoader type="table" />
         ) : orders.length === 0 ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
             Nenhuma ordem de serviço encontrada
