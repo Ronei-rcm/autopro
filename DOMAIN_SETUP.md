@@ -4,11 +4,12 @@
 
 ### 1. Nginx Configuration
 
-Criada configuração do nginx em `/etc/nginx/sites-available/autopro.re9suainternet.com.br.conf`:
+Criada configuração do nginx em `/etc/nginx/conf.d/domains/autopro.re9suainternet.com.br.conf`:
 
-- **Frontend**: Serve arquivos estáticos de `/home/mec-poa/frontend/dist`
+- **Frontend**: Proxy reverso para `http://localhost:5173` (Vite dev server)
 - **API**: Proxy reverso para `http://localhost:3002/api`
 - **Logs**: `/var/log/nginx/autopro-access.log` e `/var/log/nginx/autopro-error.log`
+- **WebSocket**: Suporte para HMR (Hot Module Replacement) do Vite
 
 ### 2. Backend CORS
 
