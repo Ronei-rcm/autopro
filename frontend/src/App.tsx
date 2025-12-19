@@ -3,7 +3,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import PrivateRoute from './components/common/PrivateRoute';
-import Layout from './components/common/Layout';
+import MainLayout from './components/layout/MainLayout';
 
 function App() {
   return (
@@ -15,9 +15,9 @@ function App() {
             path="/"
             element={
               <PrivateRoute>
-                <Layout>
+                <MainLayout>
                   <Dashboard />
-                </Layout>
+                </MainLayout>
               </PrivateRoute>
             }
           />

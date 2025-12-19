@@ -1,89 +1,89 @@
+import { Users, FileText, DollarSign, Package, Calendar } from 'lucide-react';
+import KPICard from '../components/dashboard/KPICard';
+import RevenueChart from '../components/dashboard/RevenueChart';
+import ServicesChart from '../components/dashboard/ServicesChart';
+
 const Dashboard = () => {
   return (
     <div>
-      <h1>Dashboard</h1>
-      <p>Bem-vindo ao sistema de gestão da oficina mecânica!</p>
-      <div style={{ marginTop: '2rem' }}>
-        <h2>Módulos Disponíveis</h2>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-            gap: '1rem',
-            marginTop: '1rem',
-          }}
-        >
-          <div
-            style={{
-              padding: '1.5rem',
-              backgroundColor: 'white',
-              borderRadius: '8px',
-              boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-            }}
-          >
-            <h3>Clientes</h3>
-            <p>Gerenciar cadastro de clientes</p>
-          </div>
-          <div
-            style={{
-              padding: '1.5rem',
-              backgroundColor: 'white',
-              borderRadius: '8px',
-              boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-            }}
-          >
-            <h3>Veículos</h3>
-            <p>Cadastro de veículos</p>
-          </div>
-          <div
-            style={{
-              padding: '1.5rem',
-              backgroundColor: 'white',
-              borderRadius: '8px',
-              boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-            }}
-          >
-            <h3>Estoque</h3>
-            <p>Controle de produtos e peças</p>
-          </div>
-          <div
-            style={{
-              padding: '1.5rem',
-              backgroundColor: 'white',
-              borderRadius: '8px',
-              boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-            }}
-          >
-            <h3>Ordens de Serviço</h3>
-            <p>Gerenciar OS</p>
-          </div>
-          <div
-            style={{
-              padding: '1.5rem',
-              backgroundColor: 'white',
-              borderRadius: '8px',
-              boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-            }}
-          >
-            <h3>Financeiro</h3>
-            <p>Contas a pagar e receber</p>
-          </div>
-          <div
-            style={{
-              padding: '1.5rem',
-              backgroundColor: 'white',
-              borderRadius: '8px',
-              boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-            }}
-          >
-            <h3>Agendamentos</h3>
-            <p>Agenda de serviços</p>
-          </div>
-        </div>
+      {/* Header */}
+      <div style={{ marginBottom: '2rem' }}>
+        <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '0.5rem' }}>
+          Dashboard
+        </h1>
+        <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
+          Visão geral do seu negócio
+        </p>
+      </div>
+
+      {/* KPIs */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '1.5rem',
+          marginBottom: '2rem',
+        }}
+      >
+        <KPICard
+          title="Clientes"
+          value="156"
+          icon={Users}
+          trend="+12% vs mês anterior"
+          trendColor="#10b981"
+          iconColor="#10b981"
+        />
+        <KPICard
+          title="OS Ativas"
+          value="12"
+          icon={FileText}
+          bgColor="#fff7ed"
+          iconColor="#f97316"
+        />
+        <KPICard
+          title="Faturamento"
+          value="R$ 45.680,00"
+          icon={DollarSign}
+          trend="+8% vs mês anterior"
+          trendColor="#10b981"
+          bgColor="#f0fdf4"
+          iconColor="#10b981"
+        />
+        <KPICard
+          title="A Receber"
+          value="R$ 8.450,00"
+          icon={DollarSign}
+          bgColor="#fefce8"
+          iconColor="#eab308"
+        />
+        <KPICard
+          title="Estoque Baixo"
+          value="3"
+          icon={Package}
+          bgColor="#fff7ed"
+          iconColor="#f97316"
+        />
+        <KPICard
+          title="Agendamentos"
+          value="5"
+          icon={Calendar}
+          iconColor="#3b82f6"
+        />
+      </div>
+
+      {/* Charts */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '2fr 1fr',
+          gap: '1.5rem',
+        }}
+      >
+        <RevenueChart />
+        <ServicesChart />
       </div>
     </div>
   );
 };
 
 export default Dashboard;
-
