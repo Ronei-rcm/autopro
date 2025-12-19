@@ -1,4 +1,4 @@
-version: '3.8'
+version: '3.7'
 
 services:
   # Banco de Dados PostgreSQL
@@ -48,8 +48,7 @@ services:
       - /app/node_modules
       - backend_logs:/app/logs
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
     networks:
       - mec-poa-network
     command: npm run dev
