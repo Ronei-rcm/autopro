@@ -2,8 +2,8 @@ module.exports = {
   apps: [
     {
       name: 'mec-poa-backend',
-      script: 'npm',
-      args: 'run dev',
+      script: 'npx',
+      args: 'tsx watch src/server.ts',
       cwd: './backend',
       instances: 1,
       exec_mode: 'fork',
