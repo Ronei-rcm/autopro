@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, Search, Edit, Trash2, User, Building2, Phone, Mail } from 'lucide-react';
 import api from '../services/api';
-import toast from 'react-hot-toast';
 import { showSuccessToast, showErrorToast } from '../components/common/ToastEnhancer';
 import SkeletonLoader from '../components/common/SkeletonLoader';
 import AdvancedFilters from '../components/common/AdvancedFilters';
