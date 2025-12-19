@@ -9,7 +9,9 @@ export class AccountReceivableModel {
     endDate?: Date
   ): Promise<any[]> {
     let query = `
-      SELECT ar.*, c.name as client_name
+      SELECT ar.id, ar.client_id, ar.order_id, ar.quote_id, ar.description, ar.due_date, ar.amount,
+             ar.received_amount as paid_amount, ar.received_at as payment_date, ar.payment_method, ar.status, ar.notes,
+             ar.created_at, ar.updated_at, c.name as client_name
       FROM accounts_receivable ar
       LEFT JOIN clients c ON ar.client_id = c.id
       WHERE 1=1
@@ -49,7 +51,9 @@ export class AccountReceivableModel {
 
   static async findById(id: number): Promise<AccountReceivable | null> {
     const result = await pool.query(
-      `SELECT ar.*, c.name as client_name
+      `SELECT ar.id, ar.client_id, ar.order_id, ar.quote_id, ar.description, ar.due_date, ar.amount,
+              ar.received_amount as paid_amount, ar.received_at as payment_date, ar.payment_method, ar.status, ar.notes,
+              ar.created_at, ar.updated_at, c.name as client_name
        FROM accounts_receivable ar
        LEFT JOIN clients c ON ar.client_id = c.id
        WHERE ar.id = $1`,
@@ -75,10 +79,10 @@ export class AccountReceivableModel {
     const result = await pool.query(
       `INSERT INTO accounts_receivable (
         order_id, client_id, description, due_date, amount,
-        paid_amount, payment_date, payment_method, status, notes
+        received_amount, received_at, payment_method, status, notes
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id, order_id, client_id, description, due_date, amount,
-                paid_amount, payment_date, payment_method, status, notes,
+                received_amount as paid_amount, received_at as payment_date, payment_method, status, notes,
                 created_at, updated_at`,
       [
         order_id || null,
@@ -117,9 +121,16 @@ export class AccountReceivableModel {
       'notes',
     ];
 
+    // Mapear campos da interface para campos do banco
+    const fieldMapping: Record<string, string> = {
+      'paid_amount': 'received_amount',
+      'payment_date': 'received_at',
+    };
+
     allowedFields.forEach((field) => {
       if (data[field as keyof typeof data] !== undefined) {
-        fields.push(`${field} = $${paramCount}`);
+        const dbField = fieldMapping[field] || field;
+        fields.push(`${dbField} = $${paramCount}`);
         values.push(data[field as keyof typeof data]);
         paramCount++;
       }
@@ -131,10 +142,10 @@ export class AccountReceivableModel {
 
     values.push(id);
     const result = await pool.query(
-      `UPDATE accounts_receivable SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+      `UPDATE accounts_receivable SET ${dbFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
        WHERE id = $${paramCount}
        RETURNING id, order_id, client_id, description, due_date, amount,
-                 paid_amount, payment_date, payment_method, status, notes,
+                 received_amount as paid_amount, received_at as payment_date, payment_method, status, notes,
                  created_at, updated_at`,
       values
     );
@@ -150,8 +161,8 @@ export class AccountReceivableModel {
     const result = await pool.query(
       `SELECT 
         COUNT(*) as total,
-        SUM(CASE WHEN status = 'open' THEN amount - paid_amount ELSE 0 END) as total_open,
-        SUM(CASE WHEN status = 'overdue' THEN amount - paid_amount ELSE 0 END) as total_overdue,
+        SUM(CASE WHEN status = 'open' THEN amount - received_amount ELSE 0 END) as total_open,
+        SUM(CASE WHEN status = 'overdue' THEN amount - received_amount ELSE 0 END) as total_overdue,
         SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END) as total_paid,
         SUM(amount) as total_amount
        FROM accounts_receivable`
