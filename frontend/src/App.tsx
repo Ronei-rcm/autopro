@@ -6,6 +6,13 @@ import MainLayout from './components/layout/MainLayout';
 import HelpAssistant from './components/ai/HelpAssistant';
 import { Toaster } from 'react-hot-toast';
 import LoadingSpinner from './components/common/LoadingSpinner';
+import ErrorBoundary from './components/common/ErrorBoundary';
+
+// Future flags do React Router para eliminar warnings
+const routerFutureFlags = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+};
 
 // Lazy load pages for code splitting
 const Login = lazy(() => import('./pages/Login'));
@@ -17,7 +24,39 @@ const Inventory = lazy(() => import('./pages/Inventory'));
 const Orders = lazy(() => import('./pages/Orders'));
 const Appointments = lazy(() => import('./pages/Appointments'));
 const Financial = lazy(() => import('./pages/Financial'));
-const Reports = lazy(() => import('./pages/Reports'));
+// Reports com tratamento de erro melhorado
+const Reports = lazy(async () => {
+  try {
+    return await import('./pages/Reports');
+  } catch (error) {
+    console.error('Erro ao carregar Reports:', error);
+    // Retorna um componente de fallback
+    return {
+      default: () => (
+        <div style={{ padding: '2rem', textAlign: 'center' }}>
+          <h2 style={{ color: '#ef4444', marginBottom: '1rem' }}>Erro ao carregar relatórios</h2>
+          <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>
+            Não foi possível carregar a página de relatórios. Por favor, recarregue a página.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '0.75rem 1.5rem',
+              backgroundColor: '#f97316',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: '600',
+            }}
+          >
+            Recarregar Página
+          </button>
+        </div>
+      ),
+    };
+  }
+});
 const Settings = lazy(() => import('./pages/Settings'));
 
 // Loading fallback component
@@ -35,10 +74,11 @@ const PageLoader = () => (
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter future={routerFutureFlags}>
         <Toaster position="top-right" />
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
+        <ErrorBoundary>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
             <Route 
               path="/login" 
               element={
@@ -156,9 +196,11 @@ function App() {
               element={
                 <PrivateRoute>
                   <MainLayout>
-                    <Suspense fallback={<PageLoader />}>
-                      <Reports />
-                    </Suspense>
+                    <ErrorBoundary>
+                      <Suspense fallback={<PageLoader />}>
+                        <Reports />
+                      </Suspense>
+                    </ErrorBoundary>
                     <HelpAssistant />
                   </MainLayout>
                 </PrivateRoute>
@@ -180,6 +222,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
+        </ErrorBoundary>
       </BrowserRouter>
     </AuthProvider>
   );
