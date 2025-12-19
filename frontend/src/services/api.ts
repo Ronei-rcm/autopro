@@ -1,7 +1,16 @@
 import axios from 'axios';
 
+// Usa o proxy do Vite em desenvolvimento, ou a URL configurada em produção
+const getBaseURL = () => {
+  // Se estiver em desenvolvimento e não tiver VITE_API_URL, usa o proxy
+  if (import.meta.env.DEV && !import.meta.env.VITE_API_URL) {
+    return '/api';
+  }
+  return import.meta.env.VITE_API_URL || '/api';
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },

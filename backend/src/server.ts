@@ -17,10 +17,29 @@ import reportRoutes from './routes/report.routes';
 const app = express();
 
 // Middlewares de segurança
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
+// CORS configurado para aceitar múltiplas origens em desenvolvimento
 app.use(cors({
-  origin: env.corsOrigin,
+  origin: (origin, callback) => {
+    // Em desenvolvimento, aceita qualquer origem
+    if (env.nodeEnv === 'development') {
+      callback(null, true);
+    } else {
+      // Em produção, valida apenas origens permitidas
+      const allowedOrigins = env.corsOrigin.split(',').map(o => o.trim());
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 // Rate limiting
