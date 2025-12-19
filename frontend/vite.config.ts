@@ -26,6 +26,13 @@ export default defineConfig({
     port: 5173,
     host: '0.0.0.0', // Permite acesso de qualquer IP
     strictPort: false, // Não falhar se a porta estiver em uso
+    allowedHosts: [
+      'autopro.re9suainternet.com.br',
+      'www.autopro.re9suainternet.com.br',
+      'localhost',
+      '127.0.0.1',
+      '177.67.32.203',
+    ],
     hmr: {
       // Configuração HMR para acesso externo
       clientPort: 5173,
