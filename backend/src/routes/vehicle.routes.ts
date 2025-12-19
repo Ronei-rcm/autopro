@@ -1,18 +1,21 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
+import {
+  VehicleController,
+  createVehicleValidation,
+  updateVehicleValidation,
+} from '../controllers/vehicle.controller';
 
 const router = Router();
 
 router.use(authenticate);
 
-// TODO: Implementar controllers
-router.get('/', (req, res) => {
-  res.json({ message: 'Listar veículos' });
-});
-
-router.post('/', (req, res) => {
-  res.json({ message: 'Criar veículo' });
-});
+router.get('/', VehicleController.list);
+router.get('/client/:clientId', VehicleController.getByClient);
+router.get('/:id', VehicleController.getById);
+router.post('/', createVehicleValidation, VehicleController.create);
+router.put('/:id', updateVehicleValidation, VehicleController.update);
+router.delete('/:id', VehicleController.delete);
 
 export default router;
 

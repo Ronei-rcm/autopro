@@ -3,8 +3,10 @@ import { AuthProvider } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Clients from './pages/Clients';
+import Vehicles from './pages/Vehicles';
 import PrivateRoute from './components/common/PrivateRoute';
 import MainLayout from './components/layout/MainLayout';
+import HelpAssistant from './components/ai/HelpAssistant';
 import { Toaster } from 'react-hot-toast';
 
 function App() {
@@ -20,6 +22,7 @@ function App() {
               <PrivateRoute>
                 <MainLayout>
                   <Dashboard />
+                  <HelpAssistant />
                 </MainLayout>
               </PrivateRoute>
             }
@@ -30,6 +33,18 @@ function App() {
               <PrivateRoute>
                 <MainLayout>
                   <Clients />
+                  <HelpAssistant />
+                </MainLayout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/veiculos"
+            element={
+              <PrivateRoute>
+                <MainLayout>
+                  <Vehicles />
+                  <HelpAssistant />
                 </MainLayout>
               </PrivateRoute>
             }
