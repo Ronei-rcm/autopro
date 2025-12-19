@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 interface SkeletonLoaderProps {
   type?: 'text' | 'card' | 'table' | 'list';
   lines?: number;
@@ -5,7 +7,7 @@ interface SkeletonLoaderProps {
   height?: string;
 }
 
-const SkeletonLoader = ({ 
+const SkeletonLoader = memo(({ 
   type = 'text', 
   lines = 3, 
   height = '20px' 
