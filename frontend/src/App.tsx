@@ -6,6 +6,7 @@ import Clients from './pages/Clients';
 import Vehicles from './pages/Vehicles';
 import Suppliers from './pages/Suppliers';
 import Inventory from './pages/Inventory';
+import Orders from './pages/Orders';
 import PrivateRoute from './components/common/PrivateRoute';
 import MainLayout from './components/layout/MainLayout';
 import HelpAssistant from './components/ai/HelpAssistant';
@@ -68,6 +69,17 @@ function App() {
               <PrivateRoute>
                 <MainLayout>
                   <Inventory />
+                  <HelpAssistant />
+                </MainLayout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/ordens-servico"
+            element={
+              <PrivateRoute>
+                <MainLayout>
+                  <Orders />
                   <HelpAssistant />
                 </MainLayout>
               </PrivateRoute>

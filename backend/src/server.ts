@@ -13,6 +13,7 @@ import orderRoutes from './routes/order.routes';
 import financialRoutes from './routes/financial.routes';
 import appointmentRoutes from './routes/appointment.routes';
 import reportRoutes from './routes/report.routes';
+import laborTypeRoutes from './routes/labor-type.routes';
 
 const app = express();
 
@@ -70,6 +71,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/financial', financialRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/labor-types', laborTypeRoutes);
 
 // 404 handler
 app.use((req, res) => {
