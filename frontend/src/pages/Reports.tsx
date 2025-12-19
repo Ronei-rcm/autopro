@@ -4,8 +4,6 @@ import api from '../services/api';
 import toast from 'react-hot-toast';
 import SkeletonLoader from '../components/common/SkeletonLoader';
 import { LineChart, Line, BarChart, Bar, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
 interface ReportData {
   period?: { start: string; end: string };
@@ -72,6 +70,12 @@ const Reports = () => {
     try {
       setExporting(true);
       toast.loading('Gerando PDF...', { id: 'export-pdf' });
+
+      // Import dinâmico para evitar problemas no Docker
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas'),
+      ]);
 
       // Capturar o conteúdo do relatório
       const canvas = await html2canvas(reportRef.current, {
