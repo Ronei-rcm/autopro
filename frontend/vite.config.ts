@@ -25,9 +25,11 @@ export default defineConfig({
   server: {
     port: 5173,
     host: '0.0.0.0', // Permite acesso de qualquer IP
+    strictPort: false, // Não falhar se a porta estiver em uso
     hmr: {
-      // Configuração HMR para Docker - usar o host do cliente
+      // Configuração HMR para acesso externo
       clientPort: 5173,
+      protocol: 'ws',
     },
     watch: {
       // Configuração de watch para volumes do Docker
