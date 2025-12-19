@@ -96,6 +96,33 @@ Após SSL, atualizar:
 
 ## 🔍 Troubleshooting
 
+### Erro 404 Not Found (externamente)
+**Sintoma**: Funciona localmente mas retorna 404 externamente
+
+**Possíveis causas**:
+1. **DNS não apontando corretamente**: Verificar se `autopro.re9suainternet.com.br` aponta para `177.67.32.203`
+   ```bash
+   dig autopro.re9suainternet.com.br +short
+   # Deve retornar: 177.67.32.203
+   ```
+
+2. **CDN/Cloudflare na frente**: Se houver Cloudflare, pode estar fazendo cache ou proxy
+   - Limpar cache no painel do Cloudflare
+   - Verificar se está em modo "DNS Only" ou "Proxied"
+
+3. **Configuração do Hestia**: Verificar no painel do Hestia se há configuração específica para o domínio
+
+4. **Ordem de carregamento do nginx**: Verificar se nossa configuração está sendo carregada primeiro
+   ```bash
+   sudo nginx -T 2>/dev/null | grep -B 5 "server_name autopro"
+   ```
+
+**Solução**: Testar localmente primeiro:
+```bash
+curl -H "Host: autopro.re9suainternet.com.br" http://127.0.0.1/
+# Se funcionar localmente, o problema é DNS/CDN
+```
+
 ### Erro 502 Bad Gateway
 - Verificar se backend está rodando: `pm2 status`
 - Verificar logs: `pm2 logs mec-poa-backend`
