@@ -2,8 +2,10 @@ import { Request, Response } from 'express';
 import { OrderModel } from '../models/order.model';
 import { ProductModel } from '../models/product.model';
 import { InventoryMovementModel } from '../models/inventory-movement.model';
+import { OrderHistoryModel } from '../models/order-history.model';
 import { body, validationResult } from 'express-validator';
 import { AuthRequest } from '../middleware/auth.middleware';
+import pool from '../config/database';
 
 export class OrderController {
   static async list(req: Request, res: Response): Promise<void> {
