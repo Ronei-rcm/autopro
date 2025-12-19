@@ -49,6 +49,17 @@ function App() {
               </PrivateRoute>
             }
           />
+          <Route
+            path="/fornecedores"
+            element={
+              <PrivateRoute>
+                <MainLayout>
+                  <Suppliers />
+                  <HelpAssistant />
+                </MainLayout>
+              </PrivateRoute>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
