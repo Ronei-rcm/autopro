@@ -7,8 +7,9 @@ WORKDIR /app
 # Copiar arquivos de dependências
 COPY package*.json ./
 
-# Instalar dependências
-RUN npm install
+# Instalar dependências (incluindo jspdf e html2canvas)
+RUN npm install && \
+    npm list jspdf html2canvas @types/jspdf || npm install jspdf html2canvas @types/jspdf
 
 # Copiar código fonte
 COPY . .
@@ -17,5 +18,5 @@ COPY . .
 EXPOSE 5173
 
 # Comando padrão (pode ser sobrescrito no docker-compose)
-CMD ["npm", "run", "dev", "--", "--host"]
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
