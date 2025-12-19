@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { LucideIcon } from 'lucide-react';
 
 interface KPICardProps {
@@ -10,7 +11,7 @@ interface KPICardProps {
   iconColor?: string;
 }
 
-const KPICard = ({
+const KPICard = memo(({
   title,
   value,
   icon: Icon,
@@ -98,7 +99,9 @@ const KPICard = ({
       </div>
     </div>
   );
-};
+});
+
+KPICard.displayName = 'KPICard';
 
 export default KPICard;
 

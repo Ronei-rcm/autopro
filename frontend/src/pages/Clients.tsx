@@ -68,7 +68,7 @@ const Clients = () => {
       const response = await api.get('/clients', { params });
       setClients(response.data);
     } catch (error: any) {
-      toast.error('Erro ao carregar clientes');
+      showErrorToast('Erro ao carregar clientes');
       console.error(error);
     } finally {
       setLoading(false);

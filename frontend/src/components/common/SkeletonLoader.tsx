@@ -93,6 +93,8 @@ const SkeletonLoader = ({
       ))}
     </div>
   );
-};
+});
+
+SkeletonLoader.displayName = 'SkeletonLoader';
 
 export default SkeletonLoader;

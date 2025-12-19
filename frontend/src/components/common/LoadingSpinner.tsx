@@ -1,10 +1,12 @@
+import { memo } from 'react';
+
 interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg';
   color?: string;
   fullScreen?: boolean;
 }
 
-const LoadingSpinner = ({ size = 'md', color = '#f97316', fullScreen = false }: LoadingSpinnerProps) => {
+const LoadingSpinner = memo(({ size = 'md', color = '#f97316', fullScreen = false }: LoadingSpinnerProps) => {
   const sizeMap = {
     sm: '20px',
     md: '40px',
@@ -51,6 +53,8 @@ const LoadingSpinner = ({ size = 'md', color = '#f97316', fullScreen = false }: 
   }
 
   return spinner;
-};
+});
+
+LoadingSpinner.displayName = 'LoadingSpinner';
 
 export default LoadingSpinner;
