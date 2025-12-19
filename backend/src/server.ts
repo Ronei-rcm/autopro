@@ -91,9 +91,11 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
-app.listen(env.port, () => {
-  console.log(`🚀 Servidor rodando na porta ${env.port}`);
+const host = process.env.HOST || '0.0.0.0';
+app.listen(env.port, host, () => {
+  console.log(`🚀 Servidor rodando em http://${host}:${env.port}`);
   console.log(`📝 Ambiente: ${env.nodeEnv}`);
+  console.log(`🌐 Acessível externamente: http://${host === '0.0.0.0' ? 'localhost' : host}:${env.port}`);
 });
 
 export default app;
