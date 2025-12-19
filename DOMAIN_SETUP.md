@@ -90,6 +90,8 @@ Após SSL, atualizar:
 2. **Build do Frontend**: Sempre faça `npm run build` no frontend após mudanças
 3. **CORS**: O backend aceita múltiplas origens separadas por vírgula
 4. **PM2**: Use `--update-env` ao reiniciar para carregar novas variáveis
+5. **Configuração Nginx**: A configuração está em `/etc/nginx/conf.d/domains/autopro.re9suainternet.com.br.conf`
+6. **Conflito com Hestia**: Se houver conflito com configuração padrão do Hestia, pode ser necessário desabilitar temporariamente a configuração `177.67.32.203.conf`
 
 ## 🔍 Troubleshooting
 
