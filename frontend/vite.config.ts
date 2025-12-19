@@ -25,6 +25,15 @@ export default defineConfig({
   server: {
     port: 5173,
     host: '0.0.0.0', // Permite acesso de qualquer IP
+    hmr: {
+      // Configuração HMR para Docker - usar o host do cliente
+      clientPort: 5173,
+    },
+    watch: {
+      // Configuração de watch para volumes do Docker
+      usePolling: process.env.DOCKER_ENV === 'true',
+      interval: 1000,
+    },
     proxy: {
       '/api': {
         // No Docker, o proxy do Vite roda no servidor e pode acessar 'backend'
@@ -43,6 +52,15 @@ export default defineConfig({
         },
       },
     },
+    // Aumentar timeout para módulos grandes
+    fs: {
+      strict: false,
+    },
+  },
+  optimizeDeps: {
+    // Incluir dependências pesadas no pré-bundle
+    include: ['jspdf', 'html2canvas', 'recharts'],
+    exclude: [],
   },
 })
 
