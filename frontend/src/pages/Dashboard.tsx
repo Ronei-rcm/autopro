@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Users, FileText, DollarSign, Package, Calendar, TrendingUp, TrendingDown, AlertTriangle, Clock } from 'lucide-react';
+import { Users, FileText, DollarSign, Package, Calendar, TrendingUp, AlertTriangle, Clock } from 'lucide-react';
 import api from '../services/api';
 import KPICard from '../components/dashboard/KPICard';
-import RevenueChart from '../components/dashboard/RevenueChart';
-import ServicesChart from '../components/dashboard/ServicesChart';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface DashboardData {
