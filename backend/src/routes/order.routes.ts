@@ -18,6 +18,8 @@ router.delete('/:id', OrderController.delete);
 router.post('/:id/items', addItemValidation, OrderController.addItem);
 router.delete('/:id/items/:itemId', OrderController.removeItem);
 router.put('/:id/discount', OrderController.updateDiscount);
+router.get('/statistics/overview', OrderController.getStatistics);
+router.post('/:id/quick-action', OrderController.quickAction);
 
 export default router;
 

@@ -36,7 +36,8 @@ export class OrderController {
       }
 
       const items = await OrderModel.getItems(id);
-      res.json({ ...order, items });
+      const history = await OrderHistoryModel.findByOrder(id);
+      res.json({ ...order, items, history });
     } catch (error) {
       console.error('Get order error:', error);
       res.status(500).json({ error: 'Erro ao buscar ordem de serviço' });
@@ -251,6 +252,18 @@ export class OrderController {
         return;
       }
 
+      const existingOrder = await OrderModel.findById(id);
+      if (existingOrder && existingOrder.discount !== parseFloat(discount || '0')) {
+        await OrderHistoryModel.create({
+          order_id: id,
+          field_changed: 'discount',
+          old_value: existingOrder.discount.toString(),
+          new_value: discount,
+          changed_by: req.userId,
+          notes: `Desconto alterado de ${existingOrder.discount} para ${discount}`,
+        });
+      }
+
       await OrderModel.update(id, { discount: parseFloat(discount) || 0 });
       await OrderModel.updateTotals(id);
 
@@ -259,6 +272,126 @@ export class OrderController {
     } catch (error) {
       console.error('Update discount error:', error);
       res.status(500).json({ error: 'Erro ao atualizar desconto' });
+    }
+  }
+
+  static async getStatistics(req: Request, res: Response): Promise<void> {
+    try {
+      const pool = require('../config/database').default;
+      
+      // Total de OS
+      const totalResult = await pool.query('SELECT COUNT(*) as count FROM orders');
+      const total = parseInt(totalResult.rows[0].count);
+
+      // Por status
+      const statusResult = await pool.query(
+        `SELECT status, COUNT(*) as count FROM orders GROUP BY status`
+      );
+      const byStatus = statusResult.rows.reduce((acc: any, row: any) => {
+        acc[row.status] = parseInt(row.count);
+        return acc;
+      }, {});
+
+      // Total em valores
+      const valueResult = await pool.query(
+        `SELECT 
+          SUM(CASE WHEN status = 'finished' THEN total ELSE 0 END) as finished_total,
+          SUM(CASE WHEN status IN ('open', 'in_progress', 'waiting_parts') THEN total ELSE 0 END) as pending_total,
+          SUM(total) as total_all
+         FROM orders`
+      );
+      const values = valueResult.rows[0];
+
+      // OS do mês
+      const monthResult = await pool.query(
+        `SELECT COUNT(*) as count, SUM(total) as total
+         FROM orders
+         WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE)`
+      );
+      const thisMonth = monthResult.rows[0];
+
+      res.json({
+        total,
+        byStatus,
+        values: {
+          finished: parseFloat(values.finished_total || '0'),
+          pending: parseFloat(values.pending_total || '0'),
+          all: parseFloat(values.total_all || '0'),
+        },
+        thisMonth: {
+          count: parseInt(thisMonth.count),
+          total: parseFloat(thisMonth.total || '0'),
+        },
+      });
+    } catch (error) {
+      console.error('Get statistics error:', error);
+      res.status(500).json({ error: 'Erro ao buscar estatísticas' });
+    }
+  }
+
+  static async quickAction(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const id = parseInt(req.params.id);
+      const { action } = req.body;
+
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'ID inválido' });
+        return;
+      }
+
+      const order = await OrderModel.findById(id);
+      if (!order) {
+        res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+        return;
+      }
+
+      let newStatus = order.status;
+      let updateData: any = {};
+
+      switch (action) {
+        case 'start':
+          newStatus = 'in_progress';
+          updateData = { status: newStatus, started_at: new Date() };
+          break;
+        case 'finish':
+          newStatus = 'finished';
+          updateData = { status: newStatus, finished_at: new Date() };
+          break;
+        case 'wait_parts':
+          newStatus = 'waiting_parts';
+          updateData = { status: newStatus };
+          break;
+        case 'cancel':
+          newStatus = 'cancelled';
+          updateData = { status: newStatus };
+          break;
+        case 'reopen':
+          newStatus = 'open';
+          updateData = { status: newStatus };
+          break;
+        default:
+          res.status(400).json({ error: 'Ação inválida' });
+          return;
+      }
+
+      // Registrar histórico
+      if (order.status !== newStatus) {
+        await OrderHistoryModel.create({
+          order_id: id,
+          field_changed: 'status',
+          old_value: order.status,
+          new_value: newStatus,
+          changed_by: req.userId,
+          notes: `Ação rápida: ${action}`,
+        });
+      }
+
+      await OrderModel.update(id, updateData);
+      const updatedOrder = await OrderModel.findById(id);
+      res.json(updatedOrder);
+    } catch (error) {
+      console.error('Quick action error:', error);
+      res.status(500).json({ error: 'Erro ao executar ação' });
     }
   }
 }

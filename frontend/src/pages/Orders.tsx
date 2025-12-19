@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, FileText, User, Car, Wrench, Package, DollarSign, X } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, FileText, User, Car, Wrench, Package, DollarSign, X, Eye, BarChart3, CheckCircle, Clock } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import OrderDetailModal from '../components/orders/OrderDetailModal';
 
 interface Order {
   id: number;
@@ -75,8 +76,11 @@ const Orders = () => {
   const [selectedStatus, setSelectedStatus] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showItemModal, setShowItemModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
+  const [statistics, setStatistics] = useState<any>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [formData, setFormData] = useState({
     client_id: '',
@@ -100,7 +104,17 @@ const Orders = () => {
     loadClients();
     loadProducts();
     loadLaborTypes();
+    loadStatistics();
   }, [search, selectedStatus]);
+
+  const loadStatistics = async () => {
+    try {
+      const response = await api.get('/orders/statistics/overview');
+      setStatistics(response.data);
+    } catch (error) {
+      console.error('Erro ao carregar estatísticas:', error);
+    }
+  };
 
   const loadOrders = async () => {
     try {
@@ -186,6 +200,7 @@ const Orders = () => {
       setShowModal(false);
       resetForm();
       loadOrders();
+      loadStatistics();
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Erro ao salvar ordem de serviço');
     }
@@ -211,6 +226,7 @@ const Orders = () => {
       loadOrderItems(currentOrder.id);
       loadOrders();
       loadProducts(); // Recarregar produtos para atualizar estoque
+      loadStatistics();
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Erro ao adicionar item');
     }
@@ -226,6 +242,7 @@ const Orders = () => {
       loadOrderItems(currentOrder.id);
       loadOrders();
       loadProducts();
+      loadStatistics();
     } catch (error: any) {
       toast.error('Erro ao remover item');
     }
@@ -251,6 +268,11 @@ const Orders = () => {
     setShowItemModal(true);
   };
 
+  const handleViewDetail = (orderId: number) => {
+    setSelectedOrderId(orderId);
+    setShowDetailModal(true);
+  };
+
   const handleDelete = async (id: number) => {
     if (!confirm('Tem certeza que deseja excluir esta ordem de serviço?')) return;
 
@@ -258,6 +280,7 @@ const Orders = () => {
       await api.delete(`/orders/${id}`);
       toast.success('Ordem de serviço excluída com sucesso!');
       loadOrders();
+      loadStatistics();
     } catch (error: any) {
       toast.error('Erro ao excluir ordem de serviço');
     }
@@ -355,15 +378,16 @@ const Orders = () => {
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '0.5rem' }}>
-            Ordens de Serviço
-          </h1>
-          <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
-            Gerencie as ordens de serviço da oficina
-          </p>
-        </div>
+      <div style={{ marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <div>
+            <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '0.5rem' }}>
+              Ordens de Serviço
+            </h1>
+            <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
+              Gerencie as ordens de serviço da oficina
+            </p>
+          </div>
         <button
           onClick={() => {
             resetForm();
@@ -385,6 +409,68 @@ const Orders = () => {
           <Plus size={20} />
           Nova OS
         </button>
+        </div>
+
+        {/* Statistics Cards */}
+        {statistics && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ padding: '1.5rem', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                <div style={{ padding: '0.5rem', backgroundColor: '#3b82f620', borderRadius: '8px' }}>
+                  <FileText size={20} color="#3b82f6" />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Total de OS</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b' }}>
+                    {statistics.total}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: '1.5rem', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                <div style={{ padding: '0.5rem', backgroundColor: '#10b98220', borderRadius: '8px' }}>
+                  <CheckCircle size={20} color="#10b981" />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Finalizadas</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b' }}>
+                    {statistics.byStatus?.finished || 0}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: '1.5rem', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                <div style={{ padding: '0.5rem', backgroundColor: '#f59e0b20', borderRadius: '8px' }}>
+                  <Clock size={20} color="#f59e0b" />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Em Andamento</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b' }}>
+                    {(statistics.byStatus?.in_progress || 0) + (statistics.byStatus?.waiting_parts || 0) + (statistics.byStatus?.open || 0)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: '1.5rem', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                <div style={{ padding: '0.5rem', backgroundColor: '#10b98220', borderRadius: '8px' }}>
+                  <DollarSign size={20} color="#10b981" />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Total Finalizado</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b' }}>
+                    {formatCurrency(statistics.values?.finished || 0)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Filters */}
@@ -548,6 +634,22 @@ const Orders = () => {
                   </td>
                   <td style={{ padding: '1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+                      <button
+                        onClick={() => handleViewDetail(order.id)}
+                        style={{
+                          padding: '0.5rem',
+                          backgroundColor: '#eff6ff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        title="Ver Detalhes"
+                      >
+                        <Eye size={16} color="#3b82f6" />
+                      </button>
                       <button
                         onClick={() => handleViewItems(order)}
                         style={{
@@ -1127,6 +1229,21 @@ const Orders = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Detalhes */}
+      {showDetailModal && (
+        <OrderDetailModal
+          orderId={selectedOrderId}
+          onClose={() => {
+            setShowDetailModal(false);
+            setSelectedOrderId(null);
+          }}
+          onUpdate={() => {
+            loadOrders();
+            loadStatistics();
+          }}
+        />
       )}
     </div>
   );
