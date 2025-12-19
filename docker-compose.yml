@@ -61,7 +61,8 @@ services:
       dockerfile: Dockerfile
     container_name: mec-poa-frontend
     environment:
-      VITE_API_URL: http://localhost:3002/api
+      # Não definir VITE_API_URL para usar o proxy do Vite
+      # VITE_API_URL: http://localhost:3002/api
       VITE_APP_NAME: Sistema de Gestão - Oficina Mecânica
       DOCKER_ENV: "true"
     ports:

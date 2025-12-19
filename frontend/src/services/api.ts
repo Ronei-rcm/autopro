@@ -2,10 +2,11 @@ import axios from 'axios';
 
 // Usa o proxy do Vite em desenvolvimento, ou a URL configurada em produção
 const getBaseURL = () => {
-  // Se estiver em desenvolvimento e não tiver VITE_API_URL, usa o proxy
-  if (import.meta.env.DEV && !import.meta.env.VITE_API_URL) {
+  // Em desenvolvimento, sempre usa o proxy do Vite
+  if (import.meta.env.DEV) {
     return '/api';
   }
+  // Em produção, usa a URL configurada ou padrão
   return import.meta.env.VITE_API_URL || '/api';
 };
 
