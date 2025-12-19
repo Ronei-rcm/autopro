@@ -75,3 +75,7 @@ frontend/.env
 # Permitir migrations SQL
 !backend/migrations/*.sql
 
+# Docker
+.docker/
+docker-compose.override.yml
+

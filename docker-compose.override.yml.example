@@ -1,0 +1,16 @@
+# Arquivo de exemplo para override do docker-compose
+# Copie para docker-compose.override.yml e ajuste conforme necessário
+
+version: '3.8'
+
+services:
+  backend:
+    # Exemplo: adicionar variáveis de ambiente extras
+    # environment:
+    #   - DEBUG=true
+
+  frontend:
+    # Exemplo: mudar porta do frontend
+    # ports:
+    #   - "3000:5173"
+

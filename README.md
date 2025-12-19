@@ -16,89 +16,106 @@ Sistema completo de ERP para oficinas mecânicas, desenvolvido com arquitetura m
 - 📅 **Agendamento** - Sistema de agendamento com integração Google Calendar
 - 📊 **Relatórios** - Dashboard e relatórios gerenciais
 
-## 🏗️ Arquitetura
-
-### Backend
-- **Node.js** + **Express** + **TypeScript**
-- **PostgreSQL** como banco de dados
-- **JWT** para autenticação
-- **Arquitetura MVC** com separação de responsabilidades
-- **Migrations** para versionamento do banco
-
-### Frontend
-- **React** + **TypeScript** + **Vite**
-- **Context API** para gerenciamento de estado
-- **React Router** para navegação
-- Design responsivo e moderno
-- Componentes reutilizáveis
-
-## 🚀 Como Começar
+## 🚀 Início Rápido com Docker
 
 ### Pré-requisitos
 
-- Node.js 18+ e npm
-- PostgreSQL 14+
-- Git
+- Docker e Docker Compose instalados
 
-### Instalação
-
-#### 1. Clone o repositório
-```bash
-git clone <seu-repositorio>
-cd mec-poa
-```
-
-#### 2. Backend
+### Comandos
 
 ```bash
-cd backend
-npm install
-cp .env.example .env
-# Configure as variáveis de ambiente no .env
-npm run dev
+# Iniciar todos os serviços
+make up
+# ou
+docker-compose up -d
+
+# Ver logs
+make logs
+# ou
+docker-compose logs -f
+
+# Executar migration e seed
+make migrate
+make seed
+
+# Parar serviços
+make down
 ```
 
-#### 3. Frontend
+### Acessar
 
-```bash
-cd frontend
-npm install
-cp .env.example .env
-# Configure as variáveis de ambiente no .env
-npm run dev
-```
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:3002/api
+- **PostgreSQL**: localhost:5433
 
-### Configuração do Banco de Dados
+### Credenciais Padrão
 
-```bash
-cd backend
-npm run migrate:up
-npm run seed  # (opcional) Dados iniciais
-```
+- **Email**: admin@oficina.com
+- **Senha**: admin123
+
+## 🏗️ Arquitetura
+
+### Stack Tecnológica
+
+**Backend:**
+- Node.js + Express + TypeScript
+- PostgreSQL
+- JWT para autenticação
+- Arquitetura MVC
+
+**Frontend:**
+- React + TypeScript + Vite
+- Context API para estado
+- React Router para navegação
+
+**Infraestrutura:**
+- Docker e Docker Compose
+- PostgreSQL em container
+- Hot reload em desenvolvimento
+
+### Portas Utilizadas
+
+- **Frontend**: `5173` (Vite padrão)
+- **Backend**: `3002` (externa) → `3001` (interna)
+- **PostgreSQL**: `5433` (externa) → `5432` (interna)
 
 ## 📁 Estrutura do Projeto
 
 ```
 mec-poa/
-├── backend/           # API REST
+├── backend/              # API REST
 │   ├── src/
-│   │   ├── controllers/
-│   │   ├── models/
-│   │   ├── routes/
-│   │   ├── middleware/
-│   │   ├── services/
-│   │   └── config/
 │   ├── migrations/
-│   └── tests/
-├── frontend/          # Interface React
+│   └── Dockerfile
+├── frontend/             # Interface React
 │   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── hooks/
-│   │   └── services/
-│   └── public/
-├── docs/              # Documentação
-└── scripts/           # Scripts auxiliares
+│   └── Dockerfile
+├── docs/                 # Documentação
+├── docker-compose.yml    # Orquestração Docker
+└── Makefile             # Comandos úteis
+```
+
+## 🔧 Desenvolvimento Local (sem Docker)
+
+Veja o guia completo em [SETUP.md](./SETUP.md)
+
+## 🐳 Docker
+
+Veja o guia completo em [DOCKER.md](./DOCKER.md)
+
+### Comandos Make Disponíveis
+
+```bash
+make help          # Lista todos os comandos
+make up            # Inicia containers
+make down          # Para containers
+make logs          # Ver logs
+make seed          # Executa seed
+make migrate       # Executa migrations
+make backup        # Backup do banco
+make shell-backend # Shell no backend
+make shell-db      # Shell no banco
 ```
 
 ## 🔒 Segurança
@@ -112,9 +129,12 @@ mec-poa/
 
 ## 📚 Documentação
 
-- [Modelagem do Banco de Dados](./docs/database/SCHEMA.md)
+- [Guia de Setup](./SETUP.md) - Instalação local
+- [Guia Docker](./DOCKER.md) - Uso com containers
+- [Modelagem do Banco](./docs/database/SCHEMA.md)
 - [API Documentation](./docs/api/API.md)
 - [Guia de Deploy](./docs/deployment/DEPLOY.md)
+- [Documentação do Projeto](./PROJETO.md)
 
 ## 🧪 Testes
 
@@ -135,7 +155,7 @@ MIT
 ## 👥 Contribuindo
 
 1. Fork o projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
+2. Crie uma branch (`git checkout -b feature/AmazingFeature`)
 3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
 4. Push para a branch (`git push origin feature/AmazingFeature`)
 5. Abra um Pull Request
