@@ -70,6 +70,8 @@ backend/dist/
 frontend/dist/
 backend/.env
 frontend/.env
-*.sql
 *.db
+
+# Permitir migrations SQL
+!backend/migrations/*.sql
 
