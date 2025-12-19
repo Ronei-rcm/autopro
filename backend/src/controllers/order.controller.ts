@@ -277,7 +277,6 @@ export class OrderController {
 
   static async getStatistics(req: Request, res: Response): Promise<void> {
     try {
-      const pool = require('../config/database').default;
       
       // Total de OS
       const totalResult = await pool.query('SELECT COUNT(*) as count FROM orders');
