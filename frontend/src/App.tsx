@@ -8,6 +8,7 @@ import Suppliers from './pages/Suppliers';
 import Inventory from './pages/Inventory';
 import Orders from './pages/Orders';
 import Appointments from './pages/Appointments';
+import Financial from './pages/Financial';
 import PrivateRoute from './components/common/PrivateRoute';
 import MainLayout from './components/layout/MainLayout';
 import HelpAssistant from './components/ai/HelpAssistant';
@@ -92,6 +93,17 @@ function App() {
               <PrivateRoute>
                 <MainLayout>
                   <Appointments />
+                  <HelpAssistant />
+                </MainLayout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/financeiro"
+            element={
+              <PrivateRoute>
+                <MainLayout>
+                  <Financial />
                   <HelpAssistant />
                 </MainLayout>
               </PrivateRoute>
