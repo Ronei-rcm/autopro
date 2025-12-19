@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import SkeletonLoader from '../components/common/SkeletonLoader';
 import AdvancedFilters from '../components/common/AdvancedFilters';
 import Pagination from '../components/common/Pagination';
+import ConfirmDialog from '../components/common/ConfirmDialog';
 
 interface Client {
   id: number;
@@ -28,6 +29,10 @@ const Clients = () => {
   const [itemsPerPage] = useState(10);
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; client: Client | null }>({
+    isOpen: false,
+    client: null,
+  });
   const [formData, setFormData] = useState({
     name: '',
     type: 'PF' as 'PF' | 'PJ',
@@ -133,15 +138,21 @@ const Clients = () => {
     setShowModal(true);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
+  const handleDeleteClick = (client: Client) => {
+    setDeleteConfirm({ isOpen: true, client });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm.client) return;
 
     try {
-      await api.delete(`/clients/${id}`);
+      await api.delete(`/clients/${deleteConfirm.client.id}`);
       toast.success('Cliente excluído com sucesso!');
+      setDeleteConfirm({ isOpen: false, client: null });
       loadClients();
     } catch (error: any) {
       toast.error('Erro ao excluir cliente');
+      setDeleteConfirm({ isOpen: false, client: null });
     }
   };
 
@@ -382,7 +393,7 @@ const Clients = () => {
                         <Edit size={16} color="#64748b" />
                       </button>
                       <button
-                        onClick={() => handleDelete(client.id)}
+                        onClick={() => handleDeleteClick(client)}
                         style={{
                           padding: '0.5rem',
                           backgroundColor: '#fee2e2',
@@ -651,6 +662,18 @@ const Clients = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        title="Confirmar Exclusão"
+        message={`Tem certeza que deseja excluir o cliente "${deleteConfirm.client?.name}"? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        type="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteConfirm({ isOpen: false, client: null })}
+      />
     </div>
   );
 };

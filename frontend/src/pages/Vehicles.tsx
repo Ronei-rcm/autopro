@@ -1,7 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Search, Edit, Trash2, Car, User } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import SkeletonLoader from '../components/common/SkeletonLoader';
+import AdvancedFilters from '../components/common/AdvancedFilters';
+import Pagination from '../components/common/Pagination';
+import ConfirmDialog from '../components/common/ConfirmDialog';
 
 interface Vehicle {
   id: number;
@@ -27,8 +31,15 @@ const Vehicles = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
   const [showModal, setShowModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; vehicle: Vehicle | null }>({
+    isOpen: false,
+    vehicle: null,
+  });
   const [formData, setFormData] = useState({
     client_id: '',
     brand: '',
@@ -44,12 +55,16 @@ const Vehicles = () => {
   useEffect(() => {
     loadVehicles();
     loadClients();
-  }, [search]);
+  }, [search, filters]);
 
   const loadVehicles = async () => {
     try {
       setLoading(true);
-      const params = search ? { search } : {};
+      const params: Record<string, string> = {};
+      if (search) params.search = search;
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) params[key] = value;
+      });
       const response = await api.get('/vehicles', { params });
       setVehicles(response.data);
     } catch (error: any) {
@@ -110,17 +125,44 @@ const Vehicles = () => {
     setShowModal(true);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Tem certeza que deseja excluir este veículo?')) return;
+  const handleDeleteClick = (vehicle: Vehicle) => {
+    setDeleteConfirm({ isOpen: true, vehicle });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm.vehicle) return;
 
     try {
-      await api.delete(`/vehicles/${id}`);
+      await api.delete(`/vehicles/${deleteConfirm.vehicle.id}`);
       toast.success('Veículo excluído com sucesso!');
+      setDeleteConfirm({ isOpen: false, vehicle: null });
       loadVehicles();
     } catch (error: any) {
       toast.error('Erro ao excluir veículo');
+      setDeleteConfirm({ isOpen: false, vehicle: null });
     }
   };
+
+  // Filtrar veículos localmente
+  const filteredVehicles = useMemo(() => {
+    return vehicles.filter(() => {
+      // Filtros locais podem ser adicionados aqui
+      return true;
+    });
+  }, [vehicles, filters]);
+
+  // Paginação
+  const paginatedVehicles = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredVehicles.slice(startIndex, endIndex);
+  }, [filteredVehicles, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredVehicles.length / itemsPerPage);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, search]);
 
   const resetForm = () => {
     setFormData({
@@ -179,7 +221,7 @@ const Vehicles = () => {
 
       {/* Search */}
       <div style={{ marginBottom: '1.5rem' }}>
-        <div style={{ position: 'relative', maxWidth: '400px' }}>
+        <div style={{ position: 'relative', maxWidth: '400px', marginBottom: '1rem' }}>
           <Search
             size={20}
             style={{
@@ -205,6 +247,22 @@ const Vehicles = () => {
             }}
           />
         </div>
+
+        {/* Advanced Filters */}
+        <AdvancedFilters
+          filters={{
+            brand: {
+              label: 'Marca',
+              type: 'text',
+            },
+            client_id: {
+              label: 'Cliente',
+              type: 'select',
+              options: clients.map(c => ({ label: c.name, value: c.id.toString() })),
+            },
+          }}
+          onFilterChange={setFilters}
+        />
       </div>
 
       {/* Table */}
@@ -217,10 +275,8 @@ const Vehicles = () => {
         }}
       >
         {loading ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
-            Carregando...
-          </div>
-        ) : vehicles.length === 0 ? (
+          <SkeletonLoader type="table" />
+        ) : filteredVehicles.length === 0 ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
             Nenhum veículo encontrado
           </div>
@@ -246,7 +302,7 @@ const Vehicles = () => {
               </tr>
             </thead>
             <tbody>
-              {vehicles.map((vehicle) => (
+              {paginatedVehicles.map((vehicle) => (
                 <tr
                   key={vehicle.id}
                   style={{
@@ -319,7 +375,7 @@ const Vehicles = () => {
                         <Edit size={16} color="#64748b" />
                       </button>
                       <button
-                        onClick={() => handleDelete(vehicle.id)}
+                        onClick={() => handleDeleteClick(vehicle)}
                         style={{
                           padding: '0.5rem',
                           backgroundColor: '#fee2e2',
@@ -341,7 +397,30 @@ const Vehicles = () => {
             </tbody>
           </table>
         )}
+
+        {/* Pagination */}
+        {!loading && filteredVehicles.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            totalItems={filteredVehicles.length}
+            itemsPerPage={itemsPerPage}
+          />
+        )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        title="Confirmar Exclusão"
+        message={`Tem certeza que deseja excluir o veículo "${deleteConfirm.vehicle?.brand} ${deleteConfirm.vehicle?.model}" (${deleteConfirm.vehicle?.plate || 'sem placa'})? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        type="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteConfirm({ isOpen: false, vehicle: null })}
+      />
 
       {/* Modal */}
       {showModal && (
