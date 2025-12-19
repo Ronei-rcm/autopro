@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Search, Edit, Trash2, FileText, Car, Wrench, Package, DollarSign, X, Eye, CheckCircle, Clock } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import OrderDetailModal from '../components/orders/OrderDetailModal';
 import SkeletonLoader from '../components/common/SkeletonLoader';
+import AdvancedFilters from '../components/common/AdvancedFilters';
+import Pagination from '../components/common/Pagination';
 
 interface Order {
   id: number;
@@ -75,6 +77,9 @@ const Orders = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
   const [showModal, setShowModal] = useState(false);
   const [showItemModal, setShowItemModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -106,7 +111,11 @@ const Orders = () => {
     loadProducts();
     loadLaborTypes();
     loadStatistics();
-  }, [search, selectedStatus]);
+  }, [search, selectedStatus, filters]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, search, selectedStatus]);
 
   const loadStatistics = async () => {
     try {
@@ -120,9 +129,12 @@ const Orders = () => {
   const loadOrders = async () => {
     try {
       setLoading(true);
-      const params: any = {};
+      const params: Record<string, string> = {};
       if (search) params.search = search;
       if (selectedStatus) params.status = selectedStatus;
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) params[key] = value;
+      });
 
       const response = await api.get('/orders', { params });
       setOrders(response.data);
@@ -330,6 +342,22 @@ const Orders = () => {
     }).format(value);
   };
 
+  // Filtrar e paginar ordens
+  const filteredOrders = useMemo(() => {
+    return orders.filter(() => {
+      // Filtros locais podem ser adicionados aqui
+      return true;
+    });
+  }, [orders, filters]);
+
+  const paginatedOrders = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredOrders.slice(startIndex, endIndex);
+  }, [filteredOrders, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       open: '#64748b',
@@ -475,23 +503,24 @@ const Orders = () => {
       </div>
 
       {/* Filters */}
-      <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: '250px', maxWidth: '400px' }}>
-          <Search
-            size={20}
-            style={{
-              position: 'absolute',
-              left: '12px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#64748b',
-            }}
-          />
-          <input
-            type="text"
-            placeholder="Buscar por número, cliente ou placa..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+      <div style={{ marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: '250px', maxWidth: '400px' }}>
+            <Search
+              size={20}
+              style={{
+                position: 'absolute',
+                left: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: '#64748b',
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Buscar por número, cliente ou placa..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
             style={{
               width: '100%',
               padding: '0.75rem 1rem 0.75rem 2.5rem',
@@ -500,26 +529,47 @@ const Orders = () => {
               fontSize: '0.9rem',
               outline: 'none',
             }}
-          />
+            />
+          </div>
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            style={{
+              padding: '0.75rem 1rem',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              fontSize: '0.9rem',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="">Todos os status</option>
+            <option value="open">Aberta</option>
+            <option value="in_progress">Em Andamento</option>
+            <option value="waiting_parts">Aguardando Peças</option>
+            <option value="finished">Finalizada</option>
+            <option value="cancelled">Cancelada</option>
+          </select>
         </div>
-        <select
-          value={selectedStatus}
-          onChange={(e) => setSelectedStatus(e.target.value)}
-          style={{
-            padding: '0.75rem 1rem',
-            border: '1px solid #e2e8f0',
-            borderRadius: '8px',
-            fontSize: '0.9rem',
-            cursor: 'pointer',
+
+        {/* Advanced Filters */}
+        <AdvancedFilters
+          filters={{
+            client_id: {
+              label: 'Cliente',
+              type: 'select',
+              options: clients.map(c => ({ label: c.name, value: c.id.toString() })),
+            },
+            date_from: {
+              label: 'Data Inicial',
+              type: 'date',
+            },
+            date_to: {
+              label: 'Data Final',
+              type: 'date',
+            },
           }}
-        >
-          <option value="">Todos os status</option>
-          <option value="open">Aberta</option>
-          <option value="in_progress">Em Andamento</option>
-          <option value="waiting_parts">Aguardando Peças</option>
-          <option value="finished">Finalizada</option>
-          <option value="cancelled">Cancelada</option>
-        </select>
+          onFilterChange={setFilters}
+        />
       </div>
 
       {/* Table */}
@@ -533,7 +583,7 @@ const Orders = () => {
       >
         {loading ? (
           <SkeletonLoader type="table" />
-        ) : orders.length === 0 ? (
+        ) : filteredOrders.length === 0 ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
             Nenhuma ordem de serviço encontrada
           </div>
@@ -562,7 +612,7 @@ const Orders = () => {
               </tr>
             </thead>
             <tbody>
-              {orders.map((order) => (
+              {paginatedOrders.map((order) => (
                 <tr
                   key={order.id}
                   style={{
@@ -703,6 +753,17 @@ const Orders = () => {
               ))}
             </tbody>
           </table>
+        )}
+
+        {/* Pagination */}
+        {!loading && filteredOrders.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            totalItems={filteredOrders.length}
+            itemsPerPage={itemsPerPage}
+          />
         )}
       </div>
 

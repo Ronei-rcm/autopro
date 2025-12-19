@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Search, User, Car, Package, FileText, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 
 interface SearchResult {
   type: 'client' | 'vehicle' | 'product' | 'order';
@@ -18,7 +19,20 @@ const GlobalSearch = () => {
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+
+  // Atalho para abrir busca (Ctrl+K)
+  useKeyboardShortcuts([
+    {
+      key: 'k',
+      ctrl: true,
+      action: () => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      },
+    },
+  ]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -157,8 +171,9 @@ const GlobalSearch = () => {
           }}
         />
         <input
+          ref={inputRef}
           type="text"
-          placeholder="Buscar clientes, veículos, produtos, OS..."
+          placeholder="Buscar clientes, veículos, produtos, OS... (Ctrl+K)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={(e) => {
@@ -170,6 +185,18 @@ const GlobalSearch = () => {
           onBlur={(e) => {
             e.target.style.borderColor = '#e2e8f0';
           }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setQuery('');
+              setIsOpen(false);
+              inputRef.current?.blur();
+            }
+            if (e.key === 'ArrowDown' && results.length > 0) {
+              e.preventDefault();
+              const firstResult = document.querySelector('[role="button"]') as HTMLElement;
+              firstResult?.focus();
+            }
+          }}
           style={{
             width: '100%',
             padding: '0.75rem 1rem 0.75rem 2.5rem',
@@ -179,7 +206,7 @@ const GlobalSearch = () => {
             outline: 'none',
             minHeight: '44px',
           }}
-          aria-label="Busca global"
+          aria-label="Busca global (Ctrl+K para focar)"
         />
         {query && (
           <button

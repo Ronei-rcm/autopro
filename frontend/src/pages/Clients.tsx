@@ -2,10 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { Plus, Search, Edit, Trash2, User, Building2, Phone, Mail } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { showSuccessToast, showErrorToast } from '../components/common/ToastEnhancer';
 import SkeletonLoader from '../components/common/SkeletonLoader';
 import AdvancedFilters from '../components/common/AdvancedFilters';
 import Pagination from '../components/common/Pagination';
 import ConfirmDialog from '../components/common/ConfirmDialog';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 interface Client {
   id: number;
@@ -98,21 +100,34 @@ const Clients = () => {
     setCurrentPage(1); // Reset para primeira página quando filtros mudarem
   }, [filters, search]);
 
+  // Atalhos de teclado
+  useKeyboardShortcuts([
+    {
+      key: 'n',
+      ctrl: true,
+      action: () => {
+        resetForm();
+        setShowModal(true);
+      },
+      description: 'Novo cliente',
+    },
+  ]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       if (editingClient) {
         await api.put(`/clients/${editingClient.id}`, formData);
-        toast.success('Cliente atualizado com sucesso!');
+        showSuccessToast(`Cliente "${formData.name}" atualizado com sucesso!`);
       } else {
         await api.post('/clients', formData);
-        toast.success('Cliente criado com sucesso!');
+        showSuccessToast(`Cliente "${formData.name}" criado com sucesso!`);
       }
       setShowModal(false);
       resetForm();
       loadClients();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Erro ao salvar cliente');
+      showErrorToast(error.response?.data?.error || 'Erro ao salvar cliente');
     }
   };
 
@@ -147,11 +162,11 @@ const Clients = () => {
 
     try {
       await api.delete(`/clients/${deleteConfirm.client.id}`);
-      toast.success('Cliente excluído com sucesso!');
+      showSuccessToast(`Cliente "${deleteConfirm.client.name}" excluído com sucesso!`);
       setDeleteConfirm({ isOpen: false, client: null });
       loadClients();
     } catch (error: any) {
-      toast.error('Erro ao excluir cliente');
+      showErrorToast(error.response?.data?.error || 'Erro ao excluir cliente');
       setDeleteConfirm({ isOpen: false, client: null });
     }
   };

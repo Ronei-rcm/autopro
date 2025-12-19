@@ -1,6 +1,7 @@
 import { ReactNode, useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import { useGlobalShortcuts } from '../../hooks/useKeyboardShortcuts';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -10,6 +11,9 @@ const MainLayout = ({ children }: MainLayoutProps) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Atalhos de teclado globais
+  useGlobalShortcuts();
 
   useEffect(() => {
     const handleResize = () => {
