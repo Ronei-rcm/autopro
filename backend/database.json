@@ -1,0 +1,13 @@
+{
+  "defaultEnv": "development",
+  "development": {
+    "driver": "pg",
+    "host": "localhost",
+    "port": 5432,
+    "database": "mec_poa",
+    "username": "postgres",
+    "password": "postgres",
+    "migrationDirectory": "migrations"
+  }
+}
+
