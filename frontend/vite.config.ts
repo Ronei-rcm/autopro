@@ -14,7 +14,9 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: process.env.DOCKER ? 'http://backend:3001' : 'http://localhost:3002',
+        // No Docker, o proxy do Vite roda no servidor e pode acessar 'backend'
+        // Mas o navegador precisa usar localhost, então o proxy faz o redirecionamento
+        target: process.env.DOCKER_ENV === 'true' ? 'http://backend:3001' : 'http://localhost:3002',
         changeOrigin: true,
       },
     },
