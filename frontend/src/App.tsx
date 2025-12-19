@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Clients from './pages/Clients';
 import Vehicles from './pages/Vehicles';
 import Suppliers from './pages/Suppliers';
+import Inventory from './pages/Inventory';
 import PrivateRoute from './components/common/PrivateRoute';
 import MainLayout from './components/layout/MainLayout';
 import HelpAssistant from './components/ai/HelpAssistant';
@@ -56,6 +57,17 @@ function App() {
               <PrivateRoute>
                 <MainLayout>
                   <Suppliers />
+                  <HelpAssistant />
+                </MainLayout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/estoque"
+            element={
+              <PrivateRoute>
+                <MainLayout>
+                  <Inventory />
                   <HelpAssistant />
                 </MainLayout>
               </PrivateRoute>
