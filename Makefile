@@ -1,8 +1,8 @@
-.PHONY: help up down build logs clean seed migrate test
+.PHONY: help up down build logs clean seed migrate test setup-local dev-local init-db-local
 
 help: ## Mostra esta mensagem de ajuda
 	@echo "Comandos disponíveis:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 up: ## Inicia todos os containers
 	docker-compose up -d
@@ -63,4 +63,28 @@ prod-down: ## Para em modo produção
 
 prod-logs: ## Logs em modo produção
 	docker-compose -f docker-compose.prod.yml logs -f
+
+# ============================================
+# Comandos para desenvolvimento LOCAL
+# ============================================
+
+setup-local: ## Configura ambiente local (instala dependências)
+	@chmod +x scripts/setup-local.sh
+	@./scripts/setup-local.sh
+
+dev-local: ## Inicia desenvolvimento local (backend + frontend)
+	@npm run dev
+
+dev-backend: ## Inicia apenas o backend localmente
+	@cd backend && npm run dev
+
+dev-frontend: ## Inicia apenas o frontend localmente
+	@cd frontend && npm run dev
+
+init-db-local: ## Inicializa banco de dados local
+	@chmod +x scripts/init-db-local.sh
+	@./scripts/init-db-local.sh
+
+install-all: ## Instala todas as dependências (raiz, backend, frontend)
+	@npm run install:all
 

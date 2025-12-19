@@ -19,7 +19,32 @@ Sistema completo de ERP para oficinas mecânicas, desenvolvido com arquitetura m
 - ⚙️ **Configurações** - Tipos de mão de obra e categorias
 - 🤖 **IA de Ajuda** - Assistente virtual integrado
 
-## 🚀 Início Rápido com Docker
+## 🚀 Início Rápido
+
+### Opção 1: Desenvolvimento Local (Recomendado)
+
+Para rodar tudo localmente sem Docker:
+
+```bash
+# 1. Instalar dependências
+make setup-local
+# ou
+npm run install:all
+
+# 2. Configurar banco de dados
+make init-db-local
+# ou
+./scripts/init-db-local.sh
+
+# 3. Iniciar desenvolvimento
+make dev-local
+# ou
+npm run dev
+```
+
+📖 **Guia completo**: Veja [LOCAL_SETUP.md](./LOCAL_SETUP.md) para detalhes.
+
+### Opção 2: Docker (Todos os serviços)
 
 ### Pré-requisitos
 
