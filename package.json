@@ -5,23 +5,34 @@
   "private": true,
   "scripts": {
     "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "pm2 start ecosystem.config.js",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
+    "start": "pm2 start ecosystem.config.js --env production",
+    "stop": "pm2 stop all",
+    "restart": "pm2 restart all",
+    "delete": "pm2 delete all",
+    "logs": "pm2 logs",
+    "logs:backend": "pm2 logs mec-poa-backend",
+    "logs:frontend": "pm2 logs mec-poa-frontend",
+    "status": "pm2 status",
+    "monit": "pm2 monit",
     "build": "npm run build:backend && npm run build:frontend",
     "build:backend": "cd backend && npm run build",
     "build:frontend": "cd frontend && npm run build",
-    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
     "start:backend": "cd backend && npm start",
     "start:frontend": "cd frontend && npm run preview",
     "seed": "cd backend && npm run seed",
     "migrate": "cd backend && npm run migrate:up",
     "lint": "npm run lint:backend && npm run lint:frontend",
     "lint:backend": "cd backend && npm run lint",
-    "lint:frontend": "cd frontend && npm run lint"
+    "lint:frontend": "cd frontend && npm run lint",
+    "pm2:save": "pm2 save",
+    "pm2:startup": "pm2 startup"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "pm2": "^5.3.0"
   },
   "engines": {
     "node": ">=18.0.0",

@@ -72,13 +72,13 @@ setup-local: ## Configura ambiente local (instala dependências)
 	@chmod +x scripts/setup-local.sh
 	@./scripts/setup-local.sh
 
-dev-local: ## Inicia desenvolvimento local (backend + frontend)
+dev-local: ## Inicia desenvolvimento local com PM2 (backend + frontend)
 	@npm run dev
 
-dev-backend: ## Inicia apenas o backend localmente
+dev-backend: ## Inicia apenas o backend localmente (sem PM2)
 	@cd backend && npm run dev
 
-dev-frontend: ## Inicia apenas o frontend localmente
+dev-frontend: ## Inicia apenas o frontend localmente (sem PM2)
 	@cd frontend && npm run dev
 
 init-db-local: ## Inicializa banco de dados local
@@ -87,4 +87,41 @@ init-db-local: ## Inicializa banco de dados local
 
 install-all: ## Instala todas as dependências (raiz, backend, frontend)
 	@npm run install:all
+
+# ============================================
+# Comandos PM2
+# ============================================
+
+pm2-start: ## Inicia todos os serviços com PM2
+	@npm run dev
+
+pm2-stop: ## Para todos os serviços PM2
+	@npm run stop
+
+pm2-restart: ## Reinicia todos os serviços PM2
+	@npm run restart
+
+pm2-delete: ## Remove todos os serviços do PM2
+	@npm run delete
+
+pm2-logs: ## Mostra logs de todos os serviços
+	@npm run logs
+
+pm2-logs-backend: ## Mostra logs do backend
+	@npm run logs:backend
+
+pm2-logs-frontend: ## Mostra logs do frontend
+	@npm run logs:frontend
+
+pm2-status: ## Mostra status dos serviços PM2
+	@npm run status
+
+pm2-monit: ## Abre monitor PM2
+	@npm run monit
+
+pm2-save: ## Salva configuração atual do PM2
+	@npm run pm2:save
+
+pm2-startup: ## Configura PM2 para iniciar no boot do sistema
+	@npm run pm2:startup
 
