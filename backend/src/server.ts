@@ -14,6 +14,7 @@ import financialRoutes from './routes/financial.routes';
 import appointmentRoutes from './routes/appointment.routes';
 import reportRoutes from './routes/report.routes';
 import laborTypeRoutes from './routes/labor-type.routes';
+import categoryRoutes from './routes/category.routes';
 
 const app = express();
 
@@ -72,6 +73,7 @@ app.use('/api/financial', financialRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/labor-types', laborTypeRoutes);
+app.use('/api/categories', categoryRoutes);
 
 // 404 handler
 app.use((req, res) => {

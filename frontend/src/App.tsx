@@ -10,6 +10,7 @@ import Orders from './pages/Orders';
 import Appointments from './pages/Appointments';
 import Financial from './pages/Financial';
 import Reports from './pages/Reports';
+import Settings from './pages/Settings';
 import PrivateRoute from './components/common/PrivateRoute';
 import MainLayout from './components/layout/MainLayout';
 import HelpAssistant from './components/ai/HelpAssistant';
@@ -116,6 +117,17 @@ function App() {
               <PrivateRoute>
                 <MainLayout>
                   <Reports />
+                  <HelpAssistant />
+                </MainLayout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/configuracoes"
+            element={
+              <PrivateRoute>
+                <MainLayout>
+                  <Settings />
                   <HelpAssistant />
                 </MainLayout>
               </PrivateRoute>
