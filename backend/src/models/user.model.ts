@@ -4,7 +4,15 @@ import { User, UserProfile } from '../types';
 export class UserModel {
   static async findByEmail(email: string): Promise<User | null> {
     const result = await pool.query(
-      'SELECT * FROM users WHERE email = $1',
+      'SELECT id, email, name, profile, active, created_at, updated_at FROM users WHERE email = $1',
+      [email]
+    );
+    return result.rows[0] || null;
+  }
+  
+  static async findByEmailWithPassword(email: string): Promise<{ id: number; password_hash: string } | null> {
+    const result = await pool.query(
+      'SELECT id, password_hash FROM users WHERE email = $1',
       [email]
     );
     return result.rows[0] || null;

@@ -34,11 +34,22 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Não redirecionar se já estiver na página de login
+    if (error.response?.status === 401 && !window.location.pathname.includes('/login')) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
     }
+    
+    // Melhorar mensagem de erro
+    if (error.response) {
+      // Erro da API
+      error.message = error.response.data?.error || error.response.data?.message || error.message;
+    } else if (error.request) {
+      // Erro de rede
+      error.message = 'Erro de conexão. Verifique sua internet.';
+    }
+    
     return Promise.reject(error);
   }
 );

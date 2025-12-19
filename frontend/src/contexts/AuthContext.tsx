@@ -23,33 +23,49 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
+    const checkAuth = async () => {
+      const token = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user');
 
-    if (token && storedUser) {
-      setUser(JSON.parse(storedUser));
-      // Verificar se token ainda é válido
-      api.get('/auth/me')
-        .then((response) => {
+      if (token && storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+          // Verificar se token ainda é válido
+          const response = await api.get('/auth/me');
           setUser(response.data);
-        })
-        .catch(() => {
-          logout();
-        })
-        .finally(() => {
+        } catch (error) {
+          // Token inválido, limpar storage
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setUser(null);
+        } finally {
           setLoading(false);
-        });
-    } else {
-      setLoading(false);
-    }
+        }
+      } else {
+        setLoading(false);
+      }
+    };
+
+    checkAuth();
   }, []);
 
   const login = async (email: string, password: string) => {
-    const response = await api.post('/auth/login', { email, password });
-    const { token, user } = response.data;
-    localStorage.setItem('token', token);
-    localStorage.setItem('user', JSON.stringify(user));
-    setUser(user);
+    try {
+      const response = await api.post('/auth/login', { email, password });
+      const { token, user } = response.data;
+      
+      if (!token || !user) {
+        throw new Error('Resposta inválida do servidor');
+      }
+      
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      setUser(user);
+    } catch (error: any) {
+      // Re-throw para que o componente possa tratar
+      const errorMessage = error.response?.data?.error || error.message || 'Erro ao fazer login';
+      throw new Error(errorMessage);
+    }
   };
 
   const logout = () => {

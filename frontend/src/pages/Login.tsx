@@ -19,7 +19,10 @@ const Login = () => {
       await login(email, password);
       navigate('/');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao fazer login');
+      // Tratar erro do AuthContext ou da API
+      const errorMessage = err.message || err.response?.data?.error || 'Erro ao fazer login';
+      setError(errorMessage);
+      console.error('Login error:', err);
     } finally {
       setLoading(false);
     }

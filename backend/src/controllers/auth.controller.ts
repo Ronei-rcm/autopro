@@ -17,19 +17,22 @@ export class AuthController {
 
       const { email, password } = req.body;
 
-      const user = await UserModel.findByEmail(email);
+      // Buscar usuário com hash da senha
+      const userWithPassword = await UserModel.findByEmailWithPassword(email);
+      
+      if (!userWithPassword) {
+        res.status(401).json({ error: 'Credenciais inválidas' });
+        return;
+      }
 
+      // Verificar se usuário está ativo
+      const user = await UserModel.findById(userWithPassword.id);
       if (!user || !user.active) {
         res.status(401).json({ error: 'Credenciais inválidas' });
         return;
       }
 
-      // Buscar hash da senha
-      const result = await pool.query(
-        'SELECT password_hash FROM users WHERE id = $1',
-        [user.id]
-      );
-      const passwordHash = result.rows[0].password_hash;
+      const passwordHash = userWithPassword.password_hash;
 
       const isValid = await comparePassword(password, passwordHash);
 
