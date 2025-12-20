@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Printer, Clock, User, Car, DollarSign, Package, Wrench, Play, CheckCircle, AlertCircle, XCircle, RotateCcw, Receipt } from 'lucide-react';
+import { X, Printer, Clock, User, Car, DollarSign, Package, Wrench, Play, CheckCircle, AlertCircle, XCircle, RotateCcw, Receipt, CheckSquare, Plus as PlusIcon } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
@@ -58,7 +58,7 @@ interface OrderDetailModalProps {
 const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps) => {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'details' | 'items' | 'history'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'items' | 'history' | 'checklists'>('details');
   const [showReceivableModal, setShowReceivableModal] = useState(false);
   const [receivableForm, setReceivableForm] = useState({
     use_installments: false,
@@ -66,12 +66,25 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
     first_due_date: '',
     payment_method: '',
   });
+  const [checklists, setChecklists] = useState<any[]>([]);
+  const [checklistExecutions, setChecklistExecutions] = useState<any[]>([]);
+  const [showChecklistModal, setShowChecklistModal] = useState(false);
+  const [selectedChecklist, setSelectedChecklist] = useState<any>(null);
+  const [checklistExecutionItems, setChecklistExecutionItems] = useState<Record<number, { checked: boolean; value?: string; observation?: string }>>({});
 
   useEffect(() => {
     if (orderId) {
       loadOrder();
+      loadChecklistExecutions();
     }
   }, [orderId]);
+
+  useEffect(() => {
+    if (activeTab === 'checklists' && orderId) {
+      loadChecklists();
+      loadChecklistExecutions();
+    }
+  }, [activeTab, orderId]);
 
   const loadOrder = async () => {
     try {
@@ -96,6 +109,74 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
       onUpdate();
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Erro ao executar ação');
+    }
+  };
+
+  const loadChecklists = async () => {
+    try {
+      const response = await api.get('/checklists?active_only=true');
+      setChecklists(response.data);
+    } catch (error) {
+      console.error('Erro ao carregar checklists:', error);
+    }
+  };
+
+  const loadChecklistExecutions = async () => {
+    if (!orderId) return;
+    try {
+      const response = await api.get(`/checklists/orders/${orderId}/executions`);
+      setChecklistExecutions(response.data);
+    } catch (error) {
+      console.error('Erro ao carregar execuções de checklist:', error);
+    }
+  };
+
+  const handleStartChecklist = (checklist: any) => {
+    setSelectedChecklist(checklist);
+    // Inicializar items com valores padrão
+    const itemsMap: Record<number, { checked: boolean; value?: string; observation?: string }> = {};
+    checklist.items?.forEach((item: any) => {
+      itemsMap[item.id] = { checked: false };
+    });
+    setChecklistExecutionItems(itemsMap);
+    setShowChecklistModal(true);
+  };
+
+  const handleSaveChecklistExecution = async () => {
+    if (!orderId || !order || !selectedChecklist) return;
+
+    try {
+      const items = Object.entries(checklistExecutionItems).map(([itemId, data]) => ({
+        checklist_item_id: parseInt(itemId),
+        checked: data.checked,
+        value: data.value || null,
+        observation: data.observation || null,
+      }));
+
+      await api.post(`/checklists/orders/${orderId}/executions`, {
+        checklist_id: selectedChecklist.id,
+        vehicle_id: order.vehicle_id,
+        items,
+      });
+
+      toast.success('Checklist executado com sucesso!');
+      setShowChecklistModal(false);
+      setSelectedChecklist(null);
+      setChecklistExecutionItems({});
+      loadChecklistExecutions();
+      loadOrder();
+      onUpdate();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Erro ao salvar checklist');
+    }
+  };
+
+  const handleUpdateChecklistExecutionItem = async (executionId: number, itemId: number, data: { checked?: boolean; value?: string; observation?: string }) => {
+    try {
+      await api.put(`/checklists/executions/${executionId}/items/${itemId}`, data);
+      loadChecklistExecutions();
+    } catch (error: any) {
+      toast.error('Erro ao atualizar item do checklist');
     }
   };
 
@@ -613,6 +694,7 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
           {[
             { id: 'details', label: 'Detalhes' },
             { id: 'items', label: 'Itens' },
+            { id: 'checklists', label: 'Checklists' },
             { id: 'history', label: 'Histórico' },
           ].map((tab) => (
             <button
@@ -780,6 +862,191 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
               ) : (
                 <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
                   Nenhum item adicionado
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'checklists' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: '600' }}>Checklists Executados</h3>
+                <button
+                  onClick={() => {
+                    loadChecklists();
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.5rem 1rem',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    fontSize: '0.875rem',
+                  }}
+                >
+                  <PlusIcon size={16} />
+                  Executar Checklist
+                </button>
+              </div>
+
+              {/* Checklists Disponíveis */}
+              {checklists.length > 0 && (
+                <div style={{ marginBottom: '2rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: '600', marginBottom: '1rem', color: '#64748b' }}>
+                    Checklists Disponíveis
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1rem' }}>
+                    {checklists.map((checklist) => (
+                      <div
+                        key={checklist.id}
+                        style={{
+                          padding: '1rem',
+                          backgroundColor: '#f8fafc',
+                          borderRadius: '8px',
+                          border: '1px solid #e2e8f0',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#eff6ff';
+                          e.currentTarget.style.borderColor = '#3b82f6';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#f8fafc';
+                          e.currentTarget.style.borderColor = '#e2e8f0';
+                        }}
+                        onClick={() => handleStartChecklist(checklist)}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                          <CheckSquare size={18} color="#3b82f6" />
+                          <span style={{ fontWeight: '600', color: '#1e293b' }}>{checklist.name}</span>
+                        </div>
+                        {checklist.description && (
+                          <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem' }}>
+                            {checklist.description}
+                          </div>
+                        )}
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          {checklist.items?.length || 0} itens
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Checklists Executados */}
+              {checklistExecutions.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {checklistExecutions.map((execution) => (
+                    <div
+                      key={execution.id}
+                      style={{
+                        padding: '1.5rem',
+                        backgroundColor: '#f8fafc',
+                        borderRadius: '12px',
+                        border: '1px solid #e2e8f0',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '1rem' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            <CheckSquare size={20} color="#3b82f6" />
+                            <span style={{ fontSize: '1rem', fontWeight: '600', color: '#1e293b' }}>
+                              {execution.checklist_name}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.875rem', color: '#64748b' }}>
+                            Executado em {formatDate(execution.executed_at)}
+                            {execution.mechanic_name && ` por ${execution.mechanic_name}`}
+                          </div>
+                        </div>
+                      </div>
+
+                      {execution.items && execution.items.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          {execution.items.map((item: any) => (
+                            <div
+                              key={item.id}
+                              style={{
+                                padding: '0.75rem',
+                                backgroundColor: 'white',
+                                borderRadius: '8px',
+                                border: '1px solid #e2e8f0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '1rem',
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={item.checked || false}
+                                onChange={(e) => {
+                                  handleUpdateChecklistExecutionItem(execution.id, item.checklist_item_id, {
+                                    checked: e.target.checked,
+                                  });
+                                }}
+                                style={{
+                                  width: '18px',
+                                  height: '18px',
+                                  cursor: 'pointer',
+                                }}
+                              />
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: '0.875rem', fontWeight: item.required ? '600' : '400', color: '#1e293b' }}>
+                                  {item.item_description}
+                                </div>
+                                {item.item_type === 'measure' && item.value && (
+                                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
+                                    Valor: {item.value}
+                                  </div>
+                                )}
+                                {item.observation && (
+                                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem', fontStyle: 'italic' }}>
+                                    Obs: {item.observation}
+                                  </div>
+                                )}
+                              </div>
+                              {item.item_type === 'measure' && (
+                                <input
+                                  type="text"
+                                  placeholder="Valor"
+                                  value={item.value || ''}
+                                  onChange={(e) => {
+                                    handleUpdateChecklistExecutionItem(execution.id, item.checklist_item_id, {
+                                      value: e.target.value,
+                                    });
+                                  }}
+                                  style={{
+                                    padding: '0.5rem',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '6px',
+                                    fontSize: '0.875rem',
+                                    width: '120px',
+                                  }}
+                                />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {execution.notes && (
+                        <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#fef3c7', borderRadius: '8px', fontSize: '0.875rem', color: '#92400e' }}>
+                          <strong>Observações:</strong> {execution.notes}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                  Nenhum checklist executado ainda. Selecione um checklist acima para começar.
                 </div>
               )}
             </div>
@@ -997,6 +1264,197 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
                 }}
               >
                 Gerar Conta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Executar Checklist */}
+      {showChecklistModal && selectedChecklist && order && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1003,
+            padding: '1rem',
+          }}
+          onClick={() => {
+            setShowChecklistModal(false);
+            setSelectedChecklist(null);
+            setChecklistExecutionItems({});
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '2rem',
+              width: '90%',
+              maxWidth: '700px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>
+              Executar Checklist: {selectedChecklist.name}
+            </h2>
+
+            {selectedChecklist.description && (
+              <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1.5rem' }}>
+                {selectedChecklist.description}
+              </p>
+            )}
+
+            {selectedChecklist.items && selectedChecklist.items.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+                {selectedChecklist.items.map((item: any) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      padding: '1rem',
+                      backgroundColor: '#f8fafc',
+                      borderRadius: '8px',
+                      border: '1px solid #e2e8f0',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'start', gap: '1rem' }}>
+                      {item.item_type === 'check' && (
+                        <input
+                          type="checkbox"
+                          checked={checklistExecutionItems[item.id]?.checked || false}
+                          onChange={(e) => {
+                            setChecklistExecutionItems({
+                              ...checklistExecutionItems,
+                              [item.id]: {
+                                ...checklistExecutionItems[item.id],
+                                checked: e.target.checked,
+                              },
+                            });
+                          }}
+                          style={{
+                            width: '20px',
+                            height: '20px',
+                            cursor: 'pointer',
+                            marginTop: '2px',
+                          }}
+                        />
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                          <span style={{ fontSize: '0.875rem', fontWeight: item.required ? '600' : '400', color: '#1e293b' }}>
+                            {item.description}
+                          </span>
+                          {item.required && (
+                            <span style={{ fontSize: '0.75rem', padding: '0.125rem 0.5rem', backgroundColor: '#ef444420', color: '#ef4444', borderRadius: '4px', fontWeight: '600' }}>
+                              Obrigatório
+                            </span>
+                          )}
+                        </div>
+
+                        {item.item_type === 'measure' && (
+                          <input
+                            type="text"
+                            placeholder="Informe o valor medido"
+                            value={checklistExecutionItems[item.id]?.value || ''}
+                            onChange={(e) => {
+                              setChecklistExecutionItems({
+                                ...checklistExecutionItems,
+                                [item.id]: {
+                                  ...checklistExecutionItems[item.id],
+                                  value: e.target.value,
+                                },
+                              });
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '6px',
+                              fontSize: '0.875rem',
+                              marginTop: '0.5rem',
+                            }}
+                          />
+                        )}
+
+                        {(item.item_type === 'observation' || item.item_type === 'check' || item.item_type === 'measure') && (
+                          <textarea
+                            placeholder="Observações (opcional)"
+                            value={checklistExecutionItems[item.id]?.observation || ''}
+                            onChange={(e) => {
+                              setChecklistExecutionItems({
+                                ...checklistExecutionItems,
+                                [item.id]: {
+                                  ...checklistExecutionItems[item.id],
+                                  observation: e.target.value,
+                                },
+                              });
+                            }}
+                            rows={2}
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '6px',
+                              fontSize: '0.875rem',
+                              marginTop: '0.5rem',
+                              resize: 'vertical',
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                Este checklist não possui itens.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowChecklistModal(false);
+                  setSelectedChecklist(null);
+                  setChecklistExecutionItems({});
+                }}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: '#f1f5f9',
+                  color: '#64748b',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveChecklistExecution}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                }}
+              >
+                Salvar Checklist
               </button>
             </div>
           </div>

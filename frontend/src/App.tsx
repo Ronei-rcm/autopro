@@ -61,6 +61,7 @@ const Reports = lazy(async () => {
 const Settings = lazy(() => import('./pages/Settings'));
 const Warranties = lazy(() => import('./pages/Warranties'));
 const OrderTemplates = lazy(() => import('./pages/OrderTemplates'));
+const Checklists = lazy(() => import('./pages/Checklists'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -255,6 +256,19 @@ function App() {
                   <MainLayout>
                     <Suspense fallback={<PageLoader />}>
                       <OrderTemplates />
+                    </Suspense>
+                    <HelpAssistant />
+                  </MainLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/checklists"
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Suspense fallback={<PageLoader />}>
+                      <Checklists />
                     </Suspense>
                     <HelpAssistant />
                   </MainLayout>

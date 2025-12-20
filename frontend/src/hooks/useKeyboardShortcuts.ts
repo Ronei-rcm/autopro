@@ -13,7 +13,7 @@ export const useKeyboardShortcuts = (shortcuts: Shortcut[]) => {
   useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
         // Ignorar se event.key não estiver definido
-        if (!event.key || !shortcut?.key) {
+        if (!event.key) {
           return;
         }
 

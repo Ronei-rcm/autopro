@@ -19,6 +19,7 @@ import dashboardRoutes from './routes/dashboard.routes';
 import userRoutes from './routes/user.routes';
 import warrantyRoutes from './routes/warranty.routes';
 import orderTemplateRoutes from './routes/order-template.routes';
+import checklistRoutes from './routes/checklist.routes';
 
 const app = express();
 
@@ -86,6 +87,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/warranties', warrantyRoutes);
 app.use('/api/order-templates', orderTemplateRoutes);
+app.use('/api/checklists', checklistRoutes);
 
 // 404 handler
 app.use((req, res) => {

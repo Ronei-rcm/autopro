@@ -15,7 +15,8 @@ import {
   X,
   UserPlus,
   Shield,
-  Layers
+  Layers,
+  CheckSquare
 } from 'lucide-react';
 
 const menuItems = [
@@ -29,6 +30,7 @@ const menuItems = [
   { path: '/financeiro', label: 'Financeiro', icon: DollarSign },
   { path: '/garantias', label: 'Garantias', icon: Shield },
   { path: '/templates-os', label: 'Templates de OS', icon: Layers },
+  { path: '/checklists', label: 'Checklists', icon: CheckSquare },
   { path: '/relatorios', label: 'Relatórios', icon: BarChart3 },
   { path: '/usuarios', label: 'Usuários', icon: UserPlus },
   { path: '/configuracoes', label: 'Configurações', icon: Settings },
