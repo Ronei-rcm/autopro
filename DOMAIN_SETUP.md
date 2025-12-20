@@ -1,5 +1,29 @@
 # 🌐 Configuração do Domínio autopro.re9suainternet.com.br
 
+## 📊 Status Atual
+
+✅ **Funcionando**: `http://autopro.re9suainternet.com.br:5173` (acesso direto com porta)  
+✅ **Funcionando**: `http://autopro.re9suainternet.com.br` (proxy nginx na porta 80)  
+⚠️ **IMPORTANTE**: Remover configuração antiga `/rare-toy` no painel Hestia (se existir)
+
+## 🔄 Atualização de Apontamento
+
+### Remover Configuração Antiga `/rare-toy`
+
+Se houver uma configuração antiga apontando para `/rare-toy`, ela deve ser removida ou atualizada no painel do Hestia:
+
+**URL Antiga**: `http://autopro.re9suainternet.com.br/rare-toy`  
+**URL Nova**: `http://autopro.re9suainternet.com.br:5173/login` (ou apenas `http://autopro.re9suainternet.com.br` que redireciona para login automaticamente)
+
+### Como Atualizar no Hestia CP
+
+1. Acesse o painel do Hestia CP
+2. Vá em **Web Domains** ou **Domínios Web**
+3. Localize `autopro.re9suainternet.com.br`
+4. **Remova** qualquer configuração de subpasta/document root que aponte para `/rare-toy`
+5. Certifique-se de que o domínio está apontando para o **document root padrão** (geralmente `/home/[usuário]/web/autopro.re9suainternet.com.br/public_html`)
+6. **OU** configure o domínio para usar **proxy reverso** na porta 80 (já configurado no nginx)
+
 ## ✅ Configurações Aplicadas
 
 ### 1. Nginx Configuration
@@ -91,8 +115,26 @@ Após SSL, atualizar:
 2. **Build do Frontend**: Sempre faça `npm run build` no frontend após mudanças
 3. **CORS**: O backend aceita múltiplas origens separadas por vírgula
 4. **PM2**: Use `--update-env` ao reiniciar para carregar novas variáveis
-5. **Configuração Nginx**: A configuração está em `/etc/nginx/conf.d/domains/autopro.re9suainternet.com.br.conf`
-6. **Conflito com Hestia**: Se houver conflito com configuração padrão do Hestia, pode ser necessário desabilitar temporariamente a configuração `177.67.32.203.conf`
+5. **Configuração Nginx**: A configuração está em `/etc/nginx/conf.d/00-autopro.re9suainternet.com.br.conf`
+6. **Roteamento**: O frontend redireciona automaticamente para `/login` se o usuário não estiver autenticado
+7. **Hestia**: Se houver configuração antiga apontando para `/rare-toy`, remova no painel do Hestia
+8. **Acesso**: 
+   - `http://autopro.re9suainternet.com.br` → redireciona para login se não autenticado
+   - `http://autopro.re9suainternet.com.br:5173` → acesso direto (desenvolvimento)
+
+## 🔧 Solução Temporária
+
+Enquanto o proxy na porta 80 não está funcionando, você pode acessar:
+- **Frontend**: `http://autopro.re9suainternet.com.br:5173`
+- **API**: `http://autopro.re9suainternet.com.br:3002/api` (se necessário)
+
+## 📋 Checklist para Resolver Porta 80
+
+1. ✅ DNS configurado corretamente
+2. ✅ Nginx configurado para proxy
+3. ✅ Vite configurado com allowedHosts
+4. ⚠️ **Verificar no painel Hestia**: Pode haver uma configuração de domínio que está interceptando
+5. ⚠️ **Verificar se há CDN/Cloudflare**: Pode estar fazendo cache ou proxy
 
 ## 🔍 Troubleshooting
 
@@ -111,6 +153,8 @@ Após SSL, atualizar:
    - Verificar se está em modo "DNS Only" ou "Proxied"
 
 3. **Configuração do Hestia**: Verificar no painel do Hestia se há configuração específica para o domínio
+   - Remover qualquer configuração de subpasta/document root que aponte para `/rare-toy`
+   - O domínio deve usar o document root padrão ou proxy reverso
 
 4. **Ordem de carregamento do nginx**: Verificar se nossa configuração está sendo carregada primeiro
    ```bash
@@ -136,3 +180,46 @@ curl -H "Host: autopro.re9suainternet.com.br" http://127.0.0.1/
 - Verificar `CORS_ORIGIN` no `.env` do backend
 - Reiniciar backend com `--update-env`
 - Verificar logs do nginx para ver origem da requisição
+
+### Acesso redirecionando para `/rare-toy` (301 Redirect)
+**Sintoma**: Ao acessar `http://autopro.re9suainternet.com.br`, recebe redirect 301 para `/rare-toy` que resulta em 404
+
+**Causa**: Configuração antiga no Hestia CP ou nginx que redireciona a raiz para `/rare-toy`
+
+**Solução**:
+
+1. **Verificar redirect atual:**
+   ```bash
+   curl -I http://autopro.re9suainternet.com.br
+   # Se mostrar "Location: http://autopro.re9suainternet.com.br/rare-toy", há redirect 301
+   ```
+
+2. **No Hestia CP:**
+   - Acesse: **Web** → **Web Domains**
+   - Edite: `autopro.re9suainternet.com.br`
+   - Procure por configuração de **Redirect** ou **Document Root** que mencione `/rare-toy`
+   - **Remova** ou **desabilite** essa configuração
+   - Salve as alterações
+
+3. **No Nginx (já configurado):**
+   - A configuração em `/etc/nginx/conf.d/00-autopro.re9suainternet.com.br.conf` já inclui:
+     ```nginx
+     location = /rare-toy {
+         return 301 /;
+     }
+     ```
+   - Isso redireciona `/rare-toy` de volta para a raiz `/`
+
+4. **Recarregar nginx:**
+   ```bash
+   sudo nginx -t
+   sudo systemctl reload nginx
+   ```
+
+5. **Verificar se funcionou:**
+   ```bash
+   curl -I http://autopro.re9suainternet.com.br
+   # Deve retornar Status 200 (não 301) e Location não deve aparecer
+   ```
+
+**Nota**: Se o problema persistir, pode ser necessário limpar o cache do navegador ou verificar se há CDN/Cloudflare fazendo cache do redirect antigo.

@@ -25,6 +25,7 @@ const Orders = lazy(() => import('./pages/Orders'));
 const Appointments = lazy(() => import('./pages/Appointments'));
 const Financial = lazy(() => import('./pages/Financial'));
 // Reports com tratamento de erro melhorado
+const Users = lazy(() => import('./pages/Users'));
 const Reports = lazy(async () => {
   try {
     return await import('./pages/Reports');
@@ -58,6 +59,8 @@ const Reports = lazy(async () => {
   }
 });
 const Settings = lazy(() => import('./pages/Settings'));
+const Warranties = lazy(() => import('./pages/Warranties'));
+const OrderTemplates = lazy(() => import('./pages/OrderTemplates'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -207,12 +210,51 @@ function App() {
               }
             />
             <Route
+              path="/usuarios"
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Suspense fallback={<PageLoader />}>
+                      <Users />
+                    </Suspense>
+                    <HelpAssistant />
+                  </MainLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
               path="/configuracoes"
               element={
                 <PrivateRoute>
                   <MainLayout>
                     <Suspense fallback={<PageLoader />}>
                       <Settings />
+                    </Suspense>
+                    <HelpAssistant />
+                  </MainLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/garantias"
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Suspense fallback={<PageLoader />}>
+                      <Warranties />
+                    </Suspense>
+                    <HelpAssistant />
+                  </MainLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/templates-os"
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Suspense fallback={<PageLoader />}>
+                      <OrderTemplates />
                     </Suspense>
                     <HelpAssistant />
                   </MainLayout>

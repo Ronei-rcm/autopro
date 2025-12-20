@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { DollarSign, TrendingUp, TrendingDown, Plus, Edit, Trash2 } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, Plus, Edit, Trash2, X, Calendar } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import SkeletonLoader from '../components/common/SkeletonLoader';
@@ -19,6 +19,16 @@ interface Payable {
   notes?: string;
 }
 
+interface Installment {
+  id?: number;
+  installment_number: number;
+  due_date: string;
+  amount: number;
+  paid_amount?: number;
+  payment_method?: string;
+  status?: string;
+}
+
 interface Receivable {
   id: number;
   order_id?: number;
@@ -32,6 +42,7 @@ interface Receivable {
   payment_method?: string;
   status: string;
   notes?: string;
+  installments?: Installment[];
 }
 
 interface DashboardData {
@@ -75,6 +86,9 @@ const Financial = () => {
     status: 'open',
     notes: '',
   });
+  const [useInstallments, setUseInstallments] = useState(false);
+  const [installments, setInstallments] = useState<Installment[]>([]);
+  const [installmentCount, setInstallmentCount] = useState(2);
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
@@ -179,15 +193,32 @@ const Financial = () => {
   const handleReceivableSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const totalAmount = parseFloat(receivableFormData.amount);
+      
+      // Se usar parcelas, validar que a soma das parcelas seja igual ao valor total
+      if (useInstallments && installments.length > 0) {
+        const installmentsTotal = installments.reduce((sum, inst) => sum + parseFloat(inst.amount.toString()), 0);
+        if (Math.abs(installmentsTotal - totalAmount) > 0.01) {
+          toast.error(`A soma das parcelas (${formatCurrency(installmentsTotal)}) deve ser igual ao valor total (${formatCurrency(totalAmount)})`);
+          return;
+        }
+      }
+
       const data = {
         ...receivableFormData,
         client_id: parseInt(receivableFormData.client_id),
-        amount: parseFloat(receivableFormData.amount),
-        paid_amount: parseFloat(receivableFormData.paid_amount) || 0,
-        due_date: new Date(receivableFormData.due_date).toISOString(),
+        amount: totalAmount,
+        paid_amount: useInstallments ? 0 : (parseFloat(receivableFormData.paid_amount) || 0),
+        due_date: useInstallments ? installments[0]?.due_date || new Date().toISOString() : new Date(receivableFormData.due_date).toISOString(),
         payment_date: receivableFormData.payment_date ? new Date(receivableFormData.payment_date).toISOString() : null,
         payment_method: receivableFormData.payment_method || null,
         notes: receivableFormData.notes || null,
+        installments: useInstallments && installments.length > 0 ? installments.map(inst => ({
+          due_date: new Date(inst.due_date).toISOString(),
+          amount: parseFloat(inst.amount.toString()),
+          payment_method: inst.payment_method || null,
+          notes: null,
+        })) : undefined,
       };
 
       if (editingReceivable) {
@@ -261,6 +292,48 @@ const Financial = () => {
       notes: '',
     });
     setEditingReceivable(null);
+    setUseInstallments(false);
+    setInstallments([]);
+    setInstallmentCount(2);
+  };
+
+  const generateInstallments = () => {
+    const totalAmount = parseFloat(receivableFormData.amount);
+    if (!totalAmount || totalAmount <= 0) {
+      toast.error('Informe o valor total primeiro');
+      return;
+    }
+
+    const count = installmentCount;
+    const baseAmount = Math.floor((totalAmount / count) * 100) / 100;
+    const remainder = Math.round((totalAmount - (baseAmount * count)) * 100) / 100;
+    
+    const newInstallments: Installment[] = [];
+    const firstDueDate = receivableFormData.due_date ? new Date(receivableFormData.due_date) : new Date();
+    
+    for (let i = 0; i < count; i++) {
+      const dueDate = new Date(firstDueDate);
+      dueDate.setMonth(dueDate.getMonth() + i);
+      
+      // Primeira parcela recebe o resto para corrigir arredondamentos
+      const amount = i === 0 ? baseAmount + remainder : baseAmount;
+      
+      newInstallments.push({
+        installment_number: i + 1,
+        due_date: dueDate.toISOString().split('T')[0],
+        amount: amount,
+        paid_amount: 0,
+        status: 'open',
+      });
+    }
+    
+    setInstallments(newInstallments);
+  };
+
+  const updateInstallment = (index: number, field: keyof Installment, value: any) => {
+    const updated = [...installments];
+    (updated[index] as any)[field] = value;
+    setInstallments(updated);
   };
 
   const formatCurrency = (value: number) => {
@@ -586,9 +659,27 @@ const Financial = () => {
                           backgroundColor: overdue ? '#fef2f2' : 'white',
                         }}
                       >
-                        <td style={{ padding: '1rem', fontWeight: '600' }}>{receivable.description}</td>
+                        <td style={{ padding: '1rem', fontWeight: '600' }}>
+                          {receivable.description}
+                          {receivable.installments && receivable.installments.length > 0 && (
+                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
+                              {receivable.installments.length} parcela(s)
+                            </div>
+                          )}
+                        </td>
                         <td style={{ padding: '1rem', color: '#64748b' }}>{receivable.client_name || '-'}</td>
-                        <td style={{ padding: '1rem', color: '#64748b' }}>{formatDate(receivable.due_date)}</td>
+                        <td style={{ padding: '1rem', color: '#64748b' }}>
+                          {receivable.installments && receivable.installments.length > 0 ? (
+                            <div>
+                              <div>{formatDate(receivable.installments[0].due_date)}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                Última: {formatDate(receivable.installments[receivable.installments.length - 1].due_date)}
+                              </div>
+                            </div>
+                          ) : (
+                            formatDate(receivable.due_date)
+                          )}
+                        </td>
                         <td style={{ padding: '1rem', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(receivable.amount)}</td>
                         <td style={{ padding: '1rem', textAlign: 'right', color: '#64748b' }}>{formatCurrency(receivable.paid_amount)}</td>
                         <td style={{ padding: '1rem', textAlign: 'center' }}>
@@ -998,27 +1089,29 @@ const Financial = () => {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                {!useInstallments && (
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                      Data de Vencimento *
+                    </label>
+                    <input
+                      type="date"
+                      value={receivableFormData.due_date}
+                      onChange={(e) => setReceivableFormData({ ...receivableFormData, due_date: e.target.value })}
+                      required={!useInstallments}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        fontSize: '0.9rem',
+                      }}
+                    />
+                  </div>
+                )}
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
-                    Data de Vencimento *
-                  </label>
-                  <input
-                    type="date"
-                    value={receivableFormData.due_date}
-                    onChange={(e) => setReceivableFormData({ ...receivableFormData, due_date: e.target.value })}
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                      fontSize: '0.9rem',
-                    }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
-                    Valor *
+                    Valor Total *
                   </label>
                   <input
                     type="number"
@@ -1038,6 +1131,177 @@ const Financial = () => {
                 </div>
               </div>
 
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={useInstallments}
+                    onChange={(e) => {
+                      setUseInstallments(e.target.checked);
+                      if (!e.target.checked) {
+                        setInstallments([]);
+                      }
+                    }}
+                    disabled={!!editingReceivable}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  Dividir em parcelas
+                </label>
+              </div>
+
+              {useInstallments && !editingReceivable && (
+                <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                        Número de Parcelas
+                      </label>
+                      <input
+                        type="number"
+                        min="2"
+                        max="24"
+                        value={installmentCount}
+                        onChange={(e) => setInstallmentCount(parseInt(e.target.value) || 2)}
+                        style={{
+                          width: '100%',
+                          padding: '0.75rem',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                          fontSize: '0.9rem',
+                        }}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                        Data da Primeira Parcela
+                      </label>
+                      <input
+                        type="date"
+                        value={receivableFormData.due_date}
+                        onChange={(e) => setReceivableFormData({ ...receivableFormData, due_date: e.target.value })}
+                        style={{
+                          width: '100%',
+                          padding: '0.75rem',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                          fontSize: '0.9rem',
+                        }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={generateInstallments}
+                      disabled={!receivableFormData.amount || parseFloat(receivableFormData.amount) <= 0 || !receivableFormData.due_date}
+                      style={{
+                        padding: '0.75rem 1rem',
+                        backgroundColor: '#3b82f6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: (!receivableFormData.amount || parseFloat(receivableFormData.amount) <= 0 || !receivableFormData.due_date) ? 'not-allowed' : 'pointer',
+                        fontWeight: '600',
+                        opacity: (!receivableFormData.amount || parseFloat(receivableFormData.amount) <= 0 || !receivableFormData.due_date) ? 0.5 : 1,
+                      }}
+                    >
+                      Gerar Parcelas
+                    </button>
+                  </div>
+
+                  {installments.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.75rem' }}>
+                        Parcelas ({installments.length})
+                      </div>
+                      <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                        {installments.map((installment, index) => (
+                          <div key={index} style={{ marginBottom: '0.75rem', padding: '0.75rem', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                              <div style={{ minWidth: '40px', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
+                                {installment.installment_number}ª
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.75rem', color: '#64748b' }}>
+                                  Vencimento
+                                </label>
+                                <input
+                                  type="date"
+                                  value={installment.due_date}
+                                  onChange={(e) => updateInstallment(index, 'due_date', e.target.value)}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.5rem',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '6px',
+                                    fontSize: '0.875rem',
+                                  }}
+                                />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.75rem', color: '#64748b' }}>
+                                  Valor
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={installment.amount}
+                                  onChange={(e) => updateInstallment(index, 'amount', parseFloat(e.target.value) || 0)}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.5rem',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '6px',
+                                    fontSize: '0.875rem',
+                                  }}
+                                />
+                              </div>
+                              {installments.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = installments.filter((_, i) => i !== index);
+                                    // Renumerar parcelas
+                                    updated.forEach((inst, i) => {
+                                      inst.installment_number = i + 1;
+                                    });
+                                    setInstallments(updated);
+                                  }}
+                                  style={{
+                                    padding: '0.5rem',
+                                    backgroundColor: '#fee2e2',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                  }}
+                                  title="Remover parcela"
+                                >
+                                  <X size={16} color="#ef4444" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {receivableFormData.amount && installments.length > 0 && (
+                        <div style={{ marginTop: '0.75rem', padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '6px', border: '1px solid #86efac' }}>
+                          <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#10b981' }}>
+                            Total: {formatCurrency(installments.reduce((sum, inst) => sum + parseFloat(inst.amount.toString()), 0))}
+                            {Math.abs(installments.reduce((sum, inst) => sum + parseFloat(inst.amount.toString()), 0) - parseFloat(receivableFormData.amount)) > 0.01 && (
+                              <span style={{ color: '#ef4444', marginLeft: '0.5rem' }}>
+                                (Diferença: {formatCurrency(installments.reduce((sum, inst) => sum + parseFloat(inst.amount.toString()), 0) - parseFloat(receivableFormData.amount))})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!useInstallments && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
@@ -1076,7 +1340,9 @@ const Financial = () => {
                   />
                 </div>
               </div>
+              )}
 
+              {!useInstallments && (
               <div style={{ marginBottom: '1rem' }}>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
                   Método de Pagamento
@@ -1100,6 +1366,7 @@ const Financial = () => {
                   <option value="bank_transfer">Transferência Bancária</option>
                 </select>
               </div>
+              )}
 
               <div style={{ marginBottom: '1rem' }}>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>

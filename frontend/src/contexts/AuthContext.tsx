@@ -68,10 +68,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
+  const logout = async () => {
+    try {
+      // Limpar token e dados do usuário
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setUser(null);
+      
+      // Opcional: chamar API para invalidar token no servidor (se implementado)
+      // await api.post('/auth/logout');
+    } catch (error) {
+      // Mesmo se houver erro, limpar localmente
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setUser(null);
+    }
   };
 
   return (

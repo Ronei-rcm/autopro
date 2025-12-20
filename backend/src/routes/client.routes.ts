@@ -13,7 +13,9 @@ router.use(authenticate);
 
 router.get('/', ClientController.list);
 router.get('/count', ClientController.count);
+router.get('/:id/statistics', ClientController.getStatistics);
 router.get('/:id', ClientController.getById);
+router.get('/:id/statistics', ClientController.getStatistics);
 router.post('/', createClientValidation, ClientController.create);
 router.put('/:id', updateClientValidation, ClientController.update);
 router.delete('/:id', ClientController.delete);

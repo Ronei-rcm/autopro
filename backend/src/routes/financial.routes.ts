@@ -13,6 +13,7 @@ router.use(authenticate);
 
 // Dashboard
 router.get('/dashboard', FinancialController.getDashboard);
+router.put('/installments/:installmentId', FinancialController.updateInstallment);
 
 // Contas a Pagar
 router.get('/payables', FinancialController.listPayables);

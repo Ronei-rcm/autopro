@@ -11,9 +11,18 @@ interface Shortcut {
 
 export const useKeyboardShortcuts = (shortcuts: Shortcut[]) => {
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      shortcuts.forEach((shortcut) => {
-        const keyMatches = event.key.toLowerCase() === shortcut.key.toLowerCase();
+      const handleKeyDown = (event: KeyboardEvent) => {
+        // Ignorar se event.key não estiver definido
+        if (!event.key || !shortcut?.key) {
+          return;
+        }
+
+        shortcuts.forEach((shortcut) => {
+          // Validar se shortcut e key existem
+          if (!shortcut || !shortcut.key || !event.key) {
+            return;
+          }
+          const keyMatches = event.key.toLowerCase() === shortcut.key.toLowerCase();
         const ctrlMatches = shortcut.ctrl ? (event.ctrlKey || event.metaKey) : !event.ctrlKey && !event.metaKey;
         const shiftMatches = shortcut.shift ? event.shiftKey : !event.shiftKey;
         const altMatches = shortcut.alt ? event.altKey : !event.altKey;

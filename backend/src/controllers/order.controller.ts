@@ -3,6 +3,9 @@ import { OrderModel } from '../models/order.model';
 import { ProductModel } from '../models/product.model';
 import { InventoryMovementModel } from '../models/inventory-movement.model';
 import { OrderHistoryModel } from '../models/order-history.model';
+import { AccountReceivableModel } from '../models/account-receivable.model';
+import { InstallmentModel } from '../models/installment.model';
+import { OrderTemplateModel } from '../models/order-template.model';
 import { body, validationResult } from 'express-validator';
 import { AuthRequest } from '../middleware/auth.middleware';
 import pool from '../config/database';
@@ -54,11 +57,41 @@ export class OrderController {
         return;
       }
 
+      const { template_id, ...orderData } = req.body;
       const orderNumber = await OrderModel.generateOrderNumber();
       const order = await OrderModel.create({
-        ...req.body,
+        ...orderData,
         order_number: orderNumber,
       });
+
+      // Se template_id foi fornecido, aplicar os itens do template
+      if (template_id) {
+        const template = await OrderTemplateModel.findById(parseInt(template_id));
+        if (template && template.items && template.items.length > 0) {
+          for (const item of template.items) {
+            try {
+              await OrderModel.addItem(order.id, {
+                product_id: item.product_id || undefined,
+                labor_id: item.labor_id || undefined,
+                description: item.description,
+                quantity: item.quantity,
+                unit_price: item.unit_price,
+                item_type: item.item_type,
+              });
+            } catch (itemError) {
+              console.error(`Erro ao adicionar item do template: ${item.description}`, itemError);
+              // Continua adicionando outros itens mesmo se um falhar
+            }
+          }
+          // Atualizar totais da OS após adicionar todos os itens
+          await OrderModel.updateTotals(order.id);
+          // Retornar ordem atualizada com itens
+          const updatedOrder = await OrderModel.findById(order.id);
+          const items = await OrderModel.getItems(order.id);
+          res.status(201).json({ ...updatedOrder, items });
+          return;
+        }
+      }
 
       res.status(201).json(order);
     } catch (error: any) {
@@ -196,6 +229,96 @@ export class OrderController {
     }
   }
 
+  static async updateItem(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const orderId = parseInt(req.params.id);
+      const itemId = parseInt(req.params.itemId);
+
+      if (isNaN(orderId) || isNaN(itemId)) {
+        res.status(400).json({ error: 'IDs inválidos' });
+        return;
+      }
+
+      const order = await OrderModel.findById(orderId);
+      if (!order) {
+        res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+        return;
+      }
+
+      // Buscar item atual
+      const currentItem = await OrderModel.getItemById(itemId);
+      if (!currentItem || currentItem.order_id !== orderId) {
+        res.status(404).json({ error: 'Item não encontrado' });
+        return;
+      }
+
+      const { description, quantity, unit_price } = req.body;
+      const newTotalPrice = quantity * unit_price;
+
+      // Se for produto, atualizar estoque
+      if (currentItem.item_type === 'product' && currentItem.product_id) {
+        const product = await ProductModel.findById(currentItem.product_id);
+        if (!product) {
+          res.status(404).json({ error: 'Produto não encontrado' });
+          return;
+        }
+
+        const quantityDifference = quantity - currentItem.quantity;
+
+        // Se a quantidade aumentou, verificar estoque
+        if (quantityDifference > 0) {
+          if (product.current_quantity < quantityDifference) {
+            res.status(400).json({ error: 'Estoque insuficiente' });
+            return;
+          }
+
+          // Criar movimentação de saída pela diferença
+          await InventoryMovementModel.create({
+            product_id: currentItem.product_id,
+            type: 'exit',
+            quantity: quantityDifference,
+            reference_type: 'order',
+            reference_id: orderId,
+            notes: `Atualização de quantidade na OS ${order.order_number}`,
+            created_by: req.userId,
+          });
+        } else if (quantityDifference < 0) {
+          // Se a quantidade diminuiu, criar movimentação de entrada pela diferença
+          await InventoryMovementModel.create({
+            product_id: currentItem.product_id,
+            type: 'entry',
+            quantity: Math.abs(quantityDifference),
+            reference_type: 'order',
+            reference_id: orderId,
+            notes: `Atualização de quantidade na OS ${order.order_number}`,
+            created_by: req.userId,
+          });
+        }
+      }
+
+      // Atualizar item
+      const updatedItem = await OrderModel.updateItem(itemId, {
+        description,
+        quantity,
+        unit_price,
+        total_price: newTotalPrice,
+      });
+
+      if (!updatedItem) {
+        res.status(404).json({ error: 'Item não encontrado' });
+        return;
+      }
+
+      // Atualizar totais da ordem
+      await OrderModel.updateTotals(orderId);
+
+      res.json(updatedItem);
+    } catch (error: any) {
+      console.error('Update item error:', error);
+      res.status(500).json({ error: 'Erro ao atualizar item' });
+    }
+  }
+
   static async removeItem(req: AuthRequest, res: Response): Promise<void> {
     try {
       const orderId = parseInt(req.params.id);
@@ -274,6 +397,96 @@ export class OrderController {
     } catch (error) {
       console.error('Update discount error:', error);
       res.status(500).json({ error: 'Erro ao atualizar desconto' });
+    }
+  }
+
+  static async generateReceivable(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const orderId = parseInt(req.params.id);
+      if (isNaN(orderId)) {
+        res.status(400).json({ error: 'ID da ordem inválido' });
+        return;
+      }
+
+      const order = await OrderModel.findById(orderId);
+      if (!order) {
+        res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+        return;
+      }
+
+      // Verificar se já existe conta a receber para esta OS
+      const existingReceivables = await AccountReceivableModel.findAll(undefined, undefined, undefined, undefined);
+      const existingReceivable = existingReceivables.find((ar: any) => ar.order_id === orderId);
+      
+      if (existingReceivable) {
+        res.status(400).json({ error: 'Já existe uma conta a receber para esta ordem de serviço' });
+        return;
+      }
+
+      const { use_installments, installment_count, first_due_date, payment_method } = req.body;
+
+      // Calcular data de vencimento padrão (30 dias a partir de hoje)
+      const defaultDueDate = first_due_date ? new Date(first_due_date) : new Date();
+      if (!first_due_date) {
+        defaultDueDate.setDate(defaultDueDate.getDate() + 30);
+      }
+
+      // Criar conta a receber
+      const receivableData = {
+        order_id: orderId,
+        client_id: order.client_id,
+        description: `OS ${order.order_number} - ${order.brand || ''} ${order.model || ''}`.trim(),
+        due_date: defaultDueDate,
+        amount: order.total,
+        paid_amount: 0,
+        payment_method: payment_method || null,
+        status: 'open',
+        notes: `Gerada automaticamente da OS ${order.order_number}`,
+      };
+
+      const receivable = await AccountReceivableModel.create(receivableData);
+
+      // Se usar parcelas, criar parcelas
+      if (use_installments && installment_count && installment_count > 1) {
+        const baseAmount = Math.floor((order.total / installment_count) * 100) / 100;
+        const remainder = Math.round((order.total - (baseAmount * installment_count)) * 100) / 100;
+        const firstDueDate = new Date(first_due_date || defaultDueDate);
+
+        const installmentPromises = [];
+        for (let i = 0; i < installment_count; i++) {
+          const installmentDueDate = new Date(firstDueDate);
+          installmentDueDate.setMonth(installmentDueDate.getMonth() + i);
+          
+          const amount = i === 0 ? baseAmount + remainder : baseAmount;
+          
+          installmentPromises.push(
+            InstallmentModel.create({
+              account_receivable_id: receivable.id,
+              installment_number: i + 1,
+              due_date: installmentDueDate,
+              amount: amount,
+              paid_amount: 0,
+              status: 'open',
+              payment_method: payment_method || null,
+              notes: null,
+            })
+          );
+        }
+        
+        await Promise.all(installmentPromises);
+      }
+
+      // Buscar conta completa com parcelas se houver
+      const fullReceivable = await AccountReceivableModel.findById(receivable.id);
+      if (fullReceivable) {
+        const installments = await InstallmentModel.findByReceivableId(receivable.id);
+        res.status(201).json({ ...fullReceivable, installments });
+      } else {
+        res.status(201).json(receivable);
+      }
+    } catch (error: any) {
+      console.error('Generate receivable error:', error);
+      res.status(500).json({ error: 'Erro ao gerar conta a receber' });
     }
   }
 
@@ -408,5 +621,11 @@ export const addItemValidation = [
   body('description').notEmpty().withMessage('Descrição é obrigatória'),
   body('quantity').isFloat({ min: 0.01 }).withMessage('Quantidade deve ser positiva'),
   body('unit_price').isFloat({ min: 0 }).withMessage('Preço unitário deve ser positivo'),
+];
+
+export const updateItemValidation = [
+  body('description').optional().notEmpty().withMessage('Descrição não pode ser vazia'),
+  body('quantity').optional().isFloat({ min: 0.01 }).withMessage('Quantidade deve ser positiva'),
+  body('unit_price').optional().isFloat({ min: 0 }).withMessage('Preço unitário deve ser positivo'),
 ];
 

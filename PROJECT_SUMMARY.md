@@ -127,11 +127,17 @@ mec-poa/
 - ✅ Criação de OS
 - ✅ Status (Aberta, Em Andamento, Finalizada, Cancelada)
 - ✅ Adição de produtos e serviços
-- ✅ Cálculo automático de totais
+- ✅ **Cálculo automático de totais em tempo real**
+- ✅ **Validações avançadas (quantidade, preço, estoque)**
+- ✅ **Controle de estoque com alertas visuais**
+- ✅ **Preenchimento automático de preços ao selecionar produto/serviço**
+- ✅ **Validação de quantidade vs estoque disponível**
+- ✅ **Interface aprimorada com feedback visual**
+- ✅ **Resumo financeiro destacado**
 - ✅ Histórico de alterações
 - ✅ Filtros avançados
 - ✅ Paginação
-- ✅ Modal de detalhes completo
+- ✅ Modal de detalhes completo com ações rápidas
 
 ### 💳 Módulo Financeiro
 - ✅ Contas a Pagar
@@ -337,8 +343,9 @@ npm run stop
 - ✅ `LOCAL_SETUP.md` - Setup local
 - ✅ `PM2_GUIDE.md` - Guia PM2
 - ✅ `PROJECT_SUMMARY.md` - Este resumo
-- ✅ `docs/API.md` - Documentação da API
-- ✅ `docs/SCHEMA.md` - Schema do banco
+- ✅ `docs/api/API.md` - Documentação da API
+- ✅ `docs/database/SCHEMA.md` - Schema do banco
+- ✅ `docs/ORDERS_MODULE.md` - Documentação completa do módulo de OS
 
 ---
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, FileText, Car, Wrench, Package, DollarSign, X, Eye, CheckCircle, Clock } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, FileText, Car, Wrench, Package, DollarSign, X, Eye, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import OrderDetailModal from '../components/orders/OrderDetailModal';
@@ -74,6 +74,7 @@ const Orders = () => {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [laborTypes, setLaborTypes] = useState<LaborType[]>([]);
+  const [orderTemplates, setOrderTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
@@ -88,6 +89,7 @@ const Orders = () => {
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
   const [statistics, setStatistics] = useState<any>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [editingItem, setEditingItem] = useState<OrderItem | null>(null);
   const [formData, setFormData] = useState({
     client_id: '',
     vehicle_id: '',
@@ -95,6 +97,7 @@ const Orders = () => {
     status: 'open',
     discount: '0',
     technical_notes: '',
+    template_id: '',
   });
   const [itemFormData, setItemFormData] = useState({
     item_type: 'product' as 'product' | 'labor',
@@ -104,12 +107,14 @@ const Orders = () => {
     quantity: '1',
     unit_price: '0',
   });
+  const [itemTotal, setItemTotal] = useState(0);
 
   useEffect(() => {
     loadOrders();
     loadClients();
     loadProducts();
     loadLaborTypes();
+    loadOrderTemplates();
     loadStatistics();
   }, [search, selectedStatus, filters]);
 
@@ -168,7 +173,8 @@ const Orders = () => {
   const loadProducts = async () => {
     try {
       const response = await api.get('/products');
-      setProducts(response.data.filter((p: Product) => p.current_quantity > 0));
+      // Carregar todos os produtos, não filtrar aqui (mostraremos todos com avisos para sem estoque)
+      setProducts(response.data);
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
     }
@@ -180,6 +186,15 @@ const Orders = () => {
       setLaborTypes(response.data);
     } catch (error) {
       console.error('Erro ao carregar tipos de mão de obra:', error);
+    }
+  };
+
+  const loadOrderTemplates = async () => {
+    try {
+      const response = await api.get('/order-templates?active_only=true');
+      setOrderTemplates(response.data);
+    } catch (error) {
+      console.error('Erro ao carregar templates de OS:', error);
     }
   };
 
@@ -195,13 +210,19 @@ const Orders = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const data = {
-        ...formData,
+      const data: any = {
         client_id: parseInt(formData.client_id),
         vehicle_id: parseInt(formData.vehicle_id),
         mechanic_id: formData.mechanic_id ? parseInt(formData.mechanic_id) : null,
         discount: parseFloat(formData.discount) || 0,
+        status: formData.status,
+        technical_notes: formData.technical_notes,
       };
+
+      // Adicionar template_id apenas se estiver criando nova OS e template foi selecionado
+      if (!editingOrder && formData.template_id) {
+        data.template_id = parseInt(formData.template_id);
+      }
 
       if (editingOrder) {
         await api.put(`/orders/${editingOrder.id}`, data);
@@ -223,20 +244,41 @@ const Orders = () => {
     e.preventDefault();
     if (!currentOrder) return;
 
+    // Validações
+    if (!itemFormData.description.trim()) {
+      toast.error('Descrição é obrigatória');
+      return;
+    }
+
+    const quantity = parseFloat(itemFormData.quantity);
+    const unitPrice = parseFloat(itemFormData.unit_price);
+
+    if (quantity <= 0) {
+      toast.error('Quantidade deve ser maior que zero');
+      return;
+    }
+
+    if (unitPrice <= 0) {
+      toast.error('Preço unitário deve ser maior que zero');
+      return;
+    }
+
     try {
       const data = {
         ...itemFormData,
         product_id: itemFormData.item_type === 'product' && itemFormData.product_id ? parseInt(itemFormData.product_id) : null,
         labor_id: itemFormData.item_type === 'labor' && itemFormData.labor_id ? parseInt(itemFormData.labor_id) : null,
-        quantity: parseFloat(itemFormData.quantity),
-        unit_price: parseFloat(itemFormData.unit_price),
+        quantity: quantity,
+        unit_price: unitPrice,
       };
 
       await api.post(`/orders/${currentOrder.id}/items`, data);
       toast.success('Item adicionado com sucesso!');
-      setShowItemModal(false);
       resetItemForm();
-      loadOrderItems(currentOrder.id);
+      await loadOrderItems(currentOrder.id);
+      // Recarregar ordem atualizada
+      const orderResponse = await api.get(`/orders/${currentOrder.id}`);
+      setCurrentOrder(orderResponse.data);
       loadOrders();
       loadProducts(); // Recarregar produtos para atualizar estoque
       loadStatistics();
@@ -245,19 +287,28 @@ const Orders = () => {
     }
   };
 
+  const handleSubmitItem = editingItem ? handleUpdateItem : handleAddItem;
+
   const handleRemoveItem = async (itemId: number) => {
     if (!currentOrder) return;
-    if (!confirm('Tem certeza que deseja remover este item?')) return;
+    
+    const item = orderItems.find(i => i.id === itemId);
+    if (!item) return;
+
+    if (!confirm(`Tem certeza que deseja remover "${item.description}" da OS?`)) return;
 
     try {
       await api.delete(`/orders/${currentOrder.id}/items/${itemId}`);
       toast.success('Item removido com sucesso!');
-      loadOrderItems(currentOrder.id);
+      await loadOrderItems(currentOrder.id);
+      // Recarregar ordem atualizada
+      const orderResponse = await api.get(`/orders/${currentOrder.id}`);
+      setCurrentOrder(orderResponse.data);
       loadOrders();
       loadProducts();
       loadStatistics();
     } catch (error: any) {
-      toast.error('Erro ao remover item');
+      toast.error(error.response?.data?.error || 'Erro ao remover item');
     }
   };
 
@@ -319,6 +370,7 @@ const Orders = () => {
       status: 'open',
       discount: '0',
       technical_notes: '',
+      template_id: '',
     });
     setEditingOrder(null);
     setVehicles([]);
@@ -333,6 +385,66 @@ const Orders = () => {
       quantity: '1',
       unit_price: '0',
     });
+    setItemTotal(0);
+    setEditingItem(null);
+  };
+
+  const handleEditItem = (item: OrderItem) => {
+    setEditingItem(item);
+    setItemFormData({
+      item_type: item.item_type,
+      product_id: item.product_id?.toString() || '',
+      labor_id: item.labor_id?.toString() || '',
+      description: item.description,
+      quantity: item.quantity.toString(),
+      unit_price: item.unit_price.toString(),
+    });
+    setItemTotal(item.total_price);
+  };
+
+  const handleUpdateItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentOrder || !editingItem) return;
+
+    // Validações
+    if (!itemFormData.description.trim()) {
+      toast.error('Descrição é obrigatória');
+      return;
+    }
+
+    const quantity = parseFloat(itemFormData.quantity);
+    const unitPrice = parseFloat(itemFormData.unit_price);
+
+    if (quantity <= 0) {
+      toast.error('Quantidade deve ser maior que zero');
+      return;
+    }
+
+    if (unitPrice <= 0) {
+      toast.error('Preço unitário deve ser maior que zero');
+      return;
+    }
+
+    try {
+      const data = {
+        description: itemFormData.description,
+        quantity: quantity,
+        unit_price: unitPrice,
+      };
+
+      await api.put(`/orders/${currentOrder.id}/items/${editingItem.id}`, data);
+      toast.success('Item atualizado com sucesso!');
+      resetItemForm();
+      await loadOrderItems(currentOrder.id);
+      // Recarregar ordem atualizada
+      const orderResponse = await api.get(`/orders/${currentOrder.id}`);
+      setCurrentOrder(orderResponse.data);
+      loadOrders();
+      loadProducts(); // Recarregar produtos para atualizar estoque
+      loadStatistics();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Erro ao atualizar item');
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -341,6 +453,50 @@ const Orders = () => {
       currency: 'BRL',
     }).format(value);
   };
+
+  const renderProductWarning = useMemo(() => {
+    if (!itemFormData.product_id) return null;
+    const selectedProduct = products.find(p => p.id === parseInt(itemFormData.product_id));
+    if (selectedProduct && selectedProduct.current_quantity <= 0) {
+      return (
+        <div style={{ 
+          marginTop: '0.5rem', 
+          padding: '0.75rem', 
+          backgroundColor: '#fef2f2', 
+          border: '1px solid #fecaca',
+          borderRadius: '6px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          fontSize: '0.875rem',
+          color: '#991b1b',
+        }}>
+          <AlertCircle size={16} />
+          Este produto está sem estoque
+        </div>
+      );
+    }
+    if (selectedProduct && parseFloat(itemFormData.quantity) > selectedProduct.current_quantity) {
+      return (
+        <div style={{ 
+          marginTop: '0.5rem', 
+          padding: '0.75rem', 
+          backgroundColor: '#fef3c7', 
+          border: '1px solid #fde047',
+          borderRadius: '6px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          fontSize: '0.875rem',
+          color: '#92400e',
+        }}>
+          <AlertCircle size={16} />
+          Quantidade solicitada ({itemFormData.quantity}) excede estoque disponível ({selectedProduct.current_quantity} {selectedProduct.unit})
+        </div>
+      );
+    }
+    return null;
+  }, [itemFormData.product_id, itemFormData.quantity, products]);
 
   // Filtrar e paginar ordens
   const filteredOrders = useMemo(() => {
@@ -383,26 +539,57 @@ const Orders = () => {
   const handleProductSelect = (productId: string) => {
     const product = products.find((p) => p.id === parseInt(productId));
     if (product) {
+      const price = product.sale_price.toString();
+      const quantity = parseFloat(itemFormData.quantity) || 1;
+      const total = product.sale_price * quantity;
       setItemFormData({
         ...itemFormData,
         product_id: productId,
         description: product.name,
-        unit_price: product.sale_price.toString(),
+        unit_price: price,
       });
+      setItemTotal(total);
+    } else {
+      setItemFormData({
+        ...itemFormData,
+        product_id: productId,
+        description: '',
+        unit_price: '0',
+      });
+      setItemTotal(0);
     }
   };
 
   const handleLaborSelect = (laborId: string) => {
     const labor = laborTypes.find((l) => l.id === parseInt(laborId));
     if (labor) {
+      const price = labor.price.toString();
+      const quantity = parseFloat(itemFormData.quantity) || 1;
+      const total = labor.price * quantity;
       setItemFormData({
         ...itemFormData,
         labor_id: laborId,
         description: labor.name,
-        unit_price: labor.price.toString(),
+        unit_price: price,
       });
+      setItemTotal(total);
+    } else {
+      setItemFormData({
+        ...itemFormData,
+        labor_id: laborId,
+        description: '',
+        unit_price: '0',
+      });
+      setItemTotal(0);
     }
   };
+
+  // Calcular total quando quantidade ou preço mudar
+  useEffect(() => {
+    const quantity = parseFloat(itemFormData.quantity) || 0;
+    const unitPrice = parseFloat(itemFormData.unit_price) || 0;
+    setItemTotal(quantity * unitPrice);
+  }, [itemFormData.quantity, itemFormData.unit_price]);
 
   return (
     <div>
@@ -803,6 +990,39 @@ const Orders = () => {
               {editingOrder ? 'Editar Ordem de Serviço' : 'Nova Ordem de Serviço'}
             </h2>
             <form onSubmit={handleSubmit}>
+              {/* Template Selection - apenas ao criar nova OS */}
+              {!editingOrder && orderTemplates.length > 0 && (
+                <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600', color: '#1e40af' }}>
+                    Aplicar Template (Opcional)
+                  </label>
+                  <select
+                    value={formData.template_id}
+                    onChange={(e) => setFormData({ ...formData, template_id: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #93c5fd',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                      backgroundColor: 'white',
+                    }}
+                  >
+                    <option value="">Nenhum template</option>
+                    {orderTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name} {template.description && `- ${template.description}`} ({template.items?.length || 0} itens)
+                      </option>
+                    ))}
+                  </select>
+                  {formData.template_id && (
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#1e40af' }}>
+                      <strong>Os itens do template serão adicionados automaticamente após criar a OS.</strong>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div style={{ marginBottom: '1rem' }}>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
                   Cliente *
@@ -981,6 +1201,7 @@ const Orders = () => {
             setShowItemModal(false);
             setCurrentOrder(null);
             setOrderItems([]);
+            resetItemForm();
           }}
         >
           <div
@@ -1023,9 +1244,23 @@ const Orders = () => {
             </div>
 
             {/* Formulário de Item */}
-            <div style={{ marginBottom: '2rem', padding: '1.5rem', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-              <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: '600' }}>Adicionar Item</h3>
-              <form onSubmit={handleAddItem}>
+            <div style={{ marginBottom: '2rem', padding: '1.5rem', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: '600', color: '#1e293b' }}>
+                  {editingItem ? 'Editar Item' : 'Adicionar Item'}
+                </h3>
+                <div style={{ 
+                  padding: '0.5rem 1rem', 
+                  backgroundColor: '#10b981', 
+                  color: 'white', 
+                  borderRadius: '6px',
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                }}>
+                  Total: {formatCurrency(itemTotal)}
+                </div>
+              </div>
+              <form onSubmit={handleSubmitItem}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginBottom: '1rem' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
@@ -1041,15 +1276,19 @@ const Orders = () => {
                           labor_id: '',
                           description: '',
                           unit_price: '0',
+                          quantity: '1',
                         });
+                        setItemTotal(0);
                       }}
                       required
+                      disabled={!!editingItem}
                       style={{
                         width: '100%',
                         padding: '0.75rem',
                         border: '1px solid #e2e8f0',
                         borderRadius: '8px',
                         fontSize: '0.9rem',
+                        backgroundColor: editingItem ? '#f8fafc' : 'white',
                       }}
                     >
                       <option value="product">Produto</option>
@@ -1061,36 +1300,52 @@ const Orders = () => {
                       {itemFormData.item_type === 'product' ? 'Produto *' : 'Mão de Obra *'}
                     </label>
                     {itemFormData.item_type === 'product' ? (
-                      <select
-                        value={itemFormData.product_id}
-                        onChange={(e) => handleProductSelect(e.target.value)}
-                        required
-                        style={{
-                          width: '100%',
-                          padding: '0.75rem',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: '8px',
-                          fontSize: '0.9rem',
-                        }}
-                      >
-                        <option value="">Selecione um produto</option>
-                        {products.map((product) => (
-                          <option key={product.id} value={product.id}>
-                            {product.name} - Estoque: {product.current_quantity} {product.unit} - {formatCurrency(product.sale_price)}
-                          </option>
-                        ))}
-                      </select>
+                      <>
+                        <select
+                          value={itemFormData.product_id}
+                          onChange={(e) => handleProductSelect(e.target.value)}
+                          required
+                          disabled={!!editingItem}
+                          style={{
+                            width: '100%',
+                            padding: '0.75rem',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            fontSize: '0.9rem',
+                            backgroundColor: editingItem ? '#f8fafc' : 'white',
+                          }}
+                        >
+                          <option value="">Selecione um produto</option>
+                          {products.filter(p => p.current_quantity > 0).map((product) => (
+                            <option key={product.id} value={product.id}>
+                              {product.name} - Estoque: {product.current_quantity} {product.unit} - {formatCurrency(product.sale_price)}
+                            </option>
+                          ))}
+                          {products.filter(p => p.current_quantity <= 0).length > 0 && (
+                            <optgroup label="⚠️ Produtos sem estoque" style={{ color: '#ef4444', fontStyle: 'italic' }}>
+                              {products.filter(p => p.current_quantity <= 0).map((product) => (
+                                <option key={product.id} value={product.id} disabled style={{ color: '#ef4444' }}>
+                                  {product.name} - Sem estoque - {formatCurrency(product.sale_price)}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </select>
+                        {renderProductWarning}
+                      </>
                     ) : (
                       <select
                         value={itemFormData.labor_id}
                         onChange={(e) => handleLaborSelect(e.target.value)}
                         required
+                        disabled={!!editingItem}
                         style={{
                           width: '100%',
                           padding: '0.75rem',
                           border: '1px solid #e2e8f0',
                           borderRadius: '8px',
                           fontSize: '0.9rem',
+                          backgroundColor: editingItem ? '#f8fafc' : 'white',
                         }}
                       >
                         <option value="">Selecione um serviço</option>
@@ -1132,7 +1387,10 @@ const Orders = () => {
                       step="0.01"
                       min="0.01"
                       value={itemFormData.quantity}
-                      onChange={(e) => setItemFormData({ ...itemFormData, quantity: e.target.value })}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setItemFormData({ ...itemFormData, quantity: value });
+                      }}
                       required
                       style={{
                         width: '100%',
@@ -1152,7 +1410,10 @@ const Orders = () => {
                       step="0.01"
                       min="0"
                       value={itemFormData.unit_price}
-                      onChange={(e) => setItemFormData({ ...itemFormData, unit_price: e.target.value })}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setItemFormData({ ...itemFormData, unit_price: value });
+                      }}
                       required
                       style={{
                         width: '100%',
@@ -1163,22 +1424,60 @@ const Orders = () => {
                       }}
                     />
                   </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.75rem', color: '#64748b', fontWeight: '500' }}>
+                      Total do Item
+                    </label>
+                    <div style={{
+                      padding: '0.75rem',
+                      backgroundColor: '#f0fdf4',
+                      border: '1px solid #86efac',
+                      borderRadius: '8px',
+                      fontSize: '1rem',
+                      fontWeight: 'bold',
+                      color: '#10b981',
+                      textAlign: 'center',
+                    }}>
+                      {formatCurrency(itemTotal)}
+                    </div>
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                     <button
                       type="submit"
+                      disabled={!itemFormData.description || itemTotal <= 0}
                       style={{
                         width: '100%',
                         padding: '0.75rem',
-                        backgroundColor: '#10b981',
+                        backgroundColor: (!itemFormData.description || itemTotal <= 0) ? '#cbd5e1' : (editingItem ? '#3b82f6' : '#10b981'),
                         color: 'white',
                         border: 'none',
                         borderRadius: '8px',
-                        cursor: 'pointer',
+                        cursor: (!itemFormData.description || itemTotal <= 0) ? 'not-allowed' : 'pointer',
                         fontWeight: '600',
+                        transition: 'background-color 0.2s',
                       }}
                     >
-                      Adicionar
+                      {editingItem ? 'Salvar Alterações' : 'Adicionar'}
                     </button>
+                    {editingItem && (
+                      <button
+                        type="button"
+                        onClick={() => resetItemForm()}
+                        style={{
+                          width: '100%',
+                          marginTop: '0.5rem',
+                          padding: '0.75rem',
+                          backgroundColor: '#f1f5f9',
+                          color: '#64748b',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                        }}
+                      >
+                        Cancelar Edição
+                      </button>
+                    )}
                   </div>
                 </div>
               </form>
@@ -1186,84 +1485,138 @@ const Orders = () => {
 
             {/* Lista de Itens */}
             <div style={{ marginBottom: '1.5rem' }}>
-              <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: '600' }}>Itens Adicionados</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: '600' }}>Itens Adicionados</h3>
+                <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '500' }}>
+                  {orderItems.length} {orderItems.length === 1 ? 'item' : 'itens'}
+                </div>
+              </div>
               {orderItems.length === 0 ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-                  Nenhum item adicionado
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                  Nenhum item adicionado. Use o formulário acima para adicionar produtos ou serviços.
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                      <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
-                        Item
-                      </th>
-                      <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
-                        Qtd
-                      </th>
-                      <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
-                        Unit.
-                      </th>
-                      <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
-                        Total
-                      </th>
-                      <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
-                        Ação
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orderItems.map((item) => (
-                      <tr key={item.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '0.75rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            {item.item_type === 'product' ? (
-                              <Package size={16} color="#3b82f6" />
-                            ) : (
-                              <Wrench size={16} color="#f97316" />
-                            )}
-                            <span style={{ fontWeight: '600' }}>{item.description}</span>
-                          </div>
-                        </td>
-                        <td style={{ padding: '0.75rem', textAlign: 'right', color: '#64748b' }}>
-                          {item.quantity}
-                        </td>
-                        <td style={{ padding: '0.75rem', textAlign: 'right', color: '#64748b' }}>
-                          {formatCurrency(item.unit_price)}
-                        </td>
-                        <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: '600' }}>
-                          {formatCurrency(item.total_price)}
-                        </td>
-                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
-                          <button
-                            onClick={() => handleRemoveItem(item.id)}
-                            style={{
-                              padding: '0.25rem 0.5rem',
-                              backgroundColor: '#fee2e2',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <X size={14} color="#ef4444" />
-                          </button>
-                        </td>
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
+                          Item
+                        </th>
+                        <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
+                          Qtd
+                        </th>
+                        <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
+                          Unit.
+                        </th>
+                        <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
+                          Total
+                        </th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.875rem', fontWeight: '600', color: '#64748b', width: '80px' }}>
+                          Ação
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {orderItems.map((item, index) => (
+                        <tr 
+                          key={item.id} 
+                          style={{ 
+                            borderBottom: index < orderItems.length - 1 ? '1px solid #e2e8f0' : 'none',
+                            backgroundColor: 'white',
+                            transition: 'background-color 0.2s',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#f8fafc';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'white';
+                          }}
+                        >
+                          <td style={{ padding: '0.75rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              {item.item_type === 'product' ? (
+                                <Package size={16} color="#3b82f6" />
+                              ) : (
+                                <Wrench size={16} color="#f97316" />
+                              )}
+                              <span style={{ fontWeight: '600', color: '#1e293b' }}>{item.description}</span>
+                            </div>
+                          </td>
+                          <td style={{ padding: '0.75rem', textAlign: 'right', color: '#64748b' }}>
+                            {item.quantity.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ padding: '0.75rem', textAlign: 'right', color: '#64748b' }}>
+                            {formatCurrency(item.unit_price)}
+                          </td>
+                          <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: '600', color: '#1e293b' }}>
+                            {formatCurrency(item.total_price)}
+                          </td>
+                          <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                              <button
+                                onClick={() => handleEditItem(item)}
+                                style={{
+                                  padding: '0.5rem',
+                                  backgroundColor: '#dbeafe',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  transition: 'background-color 0.2s',
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#bfdbfe';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#dbeafe';
+                                }}
+                                title="Editar item"
+                              >
+                                <Edit size={16} color="#3b82f6" />
+                              </button>
+                              <button
+                                onClick={() => handleRemoveItem(item.id)}
+                                style={{
+                                  padding: '0.5rem',
+                                  backgroundColor: '#fee2e2',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  transition: 'background-color 0.2s',
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#fecaca';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#fee2e2';
+                                }}
+                                title="Remover item"
+                              >
+                                <Trash2 size={16} color="#ef4444" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
 
             {/* Totais */}
-            <div style={{ padding: '1.5rem', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <span style={{ color: '#64748b' }}>Subtotal:</span>
-                <span style={{ fontWeight: '600' }}>{formatCurrency(currentOrder.subtotal)}</span>
+            <div style={{ padding: '1.5rem', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #e2e8f0' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '1rem', color: '#1e293b' }}>
+                Resumo Financeiro
+              </h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', alignItems: 'center' }}>
+                <span style={{ color: '#64748b', fontSize: '0.9rem' }}>Subtotal ({orderItems.length} {orderItems.length === 1 ? 'item' : 'itens'}):</span>
+                <span style={{ fontWeight: '600', fontSize: '1rem', color: '#1e293b' }}>{formatCurrency(currentOrder.subtotal)}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <span style={{ color: '#64748b' }}>Desconto:</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', alignItems: 'center' }}>
+                <span style={{ color: '#64748b', fontSize: '0.9rem' }}>Desconto:</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>R$</span>
                   <input
                     type="number"
                     step="0.01"
@@ -1271,18 +1624,26 @@ const Orders = () => {
                     value={currentOrder.discount}
                     onChange={(e) => handleUpdateDiscount(currentOrder.id, parseFloat(e.target.value) || 0)}
                     style={{
-                      width: '100px',
+                      width: '120px',
                       padding: '0.5rem',
                       border: '1px solid #e2e8f0',
                       borderRadius: '6px',
                       fontSize: '0.875rem',
+                      textAlign: 'right',
                     }}
                   />
                 </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.5rem', borderTop: '1px solid #e2e8f0', marginTop: '0.5rem' }}>
-                <span style={{ fontWeight: '600', fontSize: '1.1rem' }}>Total:</span>
-                <span style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#10b981' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                paddingTop: '1rem', 
+                borderTop: '2px solid #e2e8f0', 
+                marginTop: '0.5rem',
+                alignItems: 'center',
+              }}>
+                <span style={{ fontWeight: '600', fontSize: '1.1rem', color: '#1e293b' }}>Total:</span>
+                <span style={{ fontWeight: 'bold', fontSize: '1.5rem', color: '#10b981' }}>
                   {formatCurrency(currentOrder.total)}
                 </span>
               </div>

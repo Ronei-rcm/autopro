@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AccountPayableModel } from '../models/account-payable.model';
 import { AccountReceivableModel } from '../models/account-receivable.model';
 import { CashFlowModel } from '../models/cash-flow.model';
+import { InstallmentModel } from '../models/installment.model';
 import { body, validationResult } from 'express-validator';
 import { AuthRequest } from '../middleware/auth.middleware';
 
@@ -153,7 +154,10 @@ export class FinancialController {
         return;
       }
 
-      res.json(receivable);
+      // Buscar parcelas relacionadas
+      const installments = await InstallmentModel.findByReceivableId(id);
+      
+      res.json({ ...receivable, installments });
     } catch (error) {
       console.error('Get receivable error:', error);
       res.status(500).json({ error: 'Erro ao buscar conta a receber' });
@@ -168,8 +172,37 @@ export class FinancialController {
         return;
       }
 
-      const receivable = await AccountReceivableModel.create(req.body);
-      res.status(201).json(receivable);
+      const { installments, ...receivableData } = req.body;
+
+      // Criar conta a receber
+      const receivable = await AccountReceivableModel.create(receivableData);
+
+      // Se houver parcelas, criá-las
+      if (installments && Array.isArray(installments) && installments.length > 0) {
+        const installmentPromises = installments.map((inst: any, index: number) =>
+          InstallmentModel.create({
+            account_receivable_id: receivable.id,
+            installment_number: index + 1,
+            due_date: inst.due_date,
+            amount: inst.amount,
+            paid_amount: 0,
+            status: 'open',
+            payment_method: inst.payment_method || null,
+            notes: inst.notes || null,
+          })
+        );
+        
+        await Promise.all(installmentPromises);
+      }
+
+      // Buscar conta com parcelas se houver
+      const fullReceivable = await AccountReceivableModel.findById(receivable.id);
+      if (fullReceivable) {
+        const installmentList = await InstallmentModel.findByReceivableId(receivable.id);
+        res.status(201).json({ ...fullReceivable, installments: installmentList });
+      } else {
+        res.status(201).json(receivable);
+      }
     } catch (error: any) {
       console.error('Create receivable error:', error);
       res.status(500).json({ error: 'Erro ao criar conta a receber' });
@@ -273,6 +306,93 @@ export class FinancialController {
       console.error('Create cash flow error:', error);
       res.status(500).json({ error: 'Erro ao criar movimento de caixa' });
     }
+  }
+
+  // Parcelas
+  static async updateInstallment(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const installmentId = parseInt(req.params.installmentId);
+      if (isNaN(installmentId)) {
+        res.status(400).json({ error: 'ID da parcela inválido' });
+        return;
+      }
+
+      const installment = await InstallmentModel.findById(installmentId);
+      if (!installment) {
+        res.status(404).json({ error: 'Parcela não encontrada' });
+        return;
+      }
+
+      const { paid_amount, payment_method, paid_at } = req.body;
+      
+      // Se está pagando a parcela
+      if (paid_amount !== undefined) {
+        const paidValue = parseFloat(paid_amount);
+        const installmentAmount = parseFloat(installment.amount.toString());
+        
+        if (paidValue >= installmentAmount) {
+          // Parcela totalmente paga
+          const updated = await InstallmentModel.update(installmentId, {
+            paid_amount: installmentAmount,
+            status: 'paid',
+            payment_method: payment_method || installment.payment_method,
+            paid_at: paid_at || new Date(),
+          });
+
+          // Atualizar status da conta a receber baseado nas parcelas
+          await this.updateReceivableStatus(installment.account_receivable_id);
+
+          res.json(updated);
+        } else if (paidValue > 0) {
+          // Pagamento parcial
+          const updated = await InstallmentModel.update(installmentId, {
+            paid_amount: paidValue,
+            payment_method: payment_method || installment.payment_method,
+            paid_at: paid_at || new Date(),
+            status: 'open',
+          });
+          res.json(updated);
+        } else {
+          // Remover pagamento
+          const updated = await InstallmentModel.update(installmentId, {
+            paid_amount: 0,
+            payment_method: null,
+            paid_at: null,
+            status: 'open',
+          });
+          await this.updateReceivableStatus(installment.account_receivable_id);
+          res.json(updated);
+        }
+      } else {
+        // Outras atualizações (data de vencimento, notas, etc)
+        const updated = await InstallmentModel.update(installmentId, req.body);
+        res.json(updated);
+      }
+    } catch (error: any) {
+      console.error('Update installment error:', error);
+      res.status(500).json({ error: 'Erro ao atualizar parcela' });
+    }
+  }
+
+  private static async updateReceivableStatus(accountReceivableId: number): Promise<void> {
+    const summary = await InstallmentModel.getSummaryByReceivableId(accountReceivableId);
+    const totalAmount = parseFloat(summary.total_amount || '0');
+    const totalPaid = parseFloat(summary.total_paid || '0');
+    const paidCount = parseInt(summary.paid_count || '0');
+    const totalInstallments = parseInt(summary.total_installments || '0');
+
+    let status = 'open';
+    if (paidCount === totalInstallments && totalPaid >= totalAmount) {
+      status = 'paid';
+    } else if (summary.overdue_count > 0) {
+      status = 'overdue';
+    }
+
+    await AccountReceivableModel.update(accountReceivableId, {
+      status,
+      paid_amount: totalPaid,
+      payment_date: status === 'paid' ? new Date() : undefined,
+    });
   }
 
   // Dashboard e Relatórios

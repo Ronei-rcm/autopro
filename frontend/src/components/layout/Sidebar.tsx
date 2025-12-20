@@ -12,7 +12,10 @@ import {
   BarChart3, 
   Settings,
   Wrench,
-  X
+  X,
+  UserPlus,
+  Shield,
+  Layers
 } from 'lucide-react';
 
 const menuItems = [
@@ -24,7 +27,10 @@ const menuItems = [
   { path: '/ordens-servico', label: 'Ordens de Serviço', icon: FileText },
   { path: '/agenda', label: 'Agenda', icon: Calendar },
   { path: '/financeiro', label: 'Financeiro', icon: DollarSign },
+  { path: '/garantias', label: 'Garantias', icon: Shield },
+  { path: '/templates-os', label: 'Templates de OS', icon: Layers },
   { path: '/relatorios', label: 'Relatórios', icon: BarChart3 },
+  { path: '/usuarios', label: 'Usuários', icon: UserPlus },
   { path: '/configuracoes', label: 'Configurações', icon: Settings },
 ];
 

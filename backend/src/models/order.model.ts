@@ -224,6 +224,48 @@ export class OrderModel {
     return result.rowCount > 0;
   }
 
+  static async updateItem(itemId: number, data: Partial<Omit<OrderItem, 'id' | 'order_id'>>): Promise<OrderItem | null> {
+    const fields: string[] = [];
+    const values: any[] = [];
+    let paramCount = 1;
+
+    const allowedFields = ['description', 'quantity', 'unit_price', 'total_price'];
+
+    allowedFields.forEach((field) => {
+      if (data[field as keyof typeof data] !== undefined) {
+        fields.push(`${field} = $${paramCount}`);
+        values.push(data[field as keyof typeof data]);
+        paramCount++;
+      }
+    });
+
+    if (fields.length === 0) {
+      // Retornar item atual se não há mudanças
+      const currentResult = await pool.query('SELECT * FROM order_items WHERE id = $1', [itemId]);
+      return currentResult.rows[0] || null;
+    }
+
+    values.push(itemId);
+    const result = await pool.query(
+      `UPDATE order_items SET ${fields.join(', ')} WHERE id = $${paramCount}
+       RETURNING id, order_id, product_id, labor_id, description, quantity, unit_price, total_price, item_type`,
+      values
+    );
+    return result.rows[0] || null;
+  }
+
+  static async getItemById(itemId: number): Promise<OrderItem | null> {
+    const result = await pool.query(
+      `SELECT oi.*, p.name as product_name, lt.name as labor_name
+       FROM order_items oi
+       LEFT JOIN products p ON oi.product_id = p.id
+       LEFT JOIN labor_types lt ON oi.labor_id = lt.id
+       WHERE oi.id = $1`,
+      [itemId]
+    );
+    return result.rows[0] || null;
+  }
+
   static async updateTotals(orderId: number): Promise<void> {
     const itemsResult = await pool.query(
       'SELECT SUM(total_price) as subtotal FROM order_items WHERE order_id = $1',

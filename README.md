@@ -12,7 +12,7 @@ Sistema completo de ERP para oficinas mecânicas, desenvolvido com arquitetura m
 - 🏢 **Cadastro de Fornecedores** - Gestão de fornecedores e produtos
 - 🚗 **Cadastro de Veículos** - Controle completo de veículos dos clientes
 - 📦 **Controle de Estoque** - Gestão de produtos/peças com alertas e movimentações
-- 📋 **Ordens de Serviço** - Criação, gestão e rastreamento completo de OS
+- 📋 **Ordens de Serviço** - Criação, gestão e rastreamento completo de OS com cálculo automático, validações e controle de estoque aprimorado
 - 💳 **Financeiro Completo** - Contas a pagar/receber e fluxo de caixa
 - 📅 **Agendamento** - Sistema de agendamento com calendário interativo
 - 📊 **Relatórios** - Dashboard e relatórios gerenciais com gráficos
@@ -181,7 +181,9 @@ make shell-db      # Shell no banco
 - **Estoque ↔ Movimentações**: Histórico completo de entradas/saídas
 
 ### Cálculos Automáticos
-- Totais de OS (subtotal, desconto, total)
+- **Totais de OS calculados em tempo real** (subtotal, desconto, total)
+- Preenchimento automático de preços ao selecionar produtos/serviços
+- Cálculo instantâneo do total do item ao alterar quantidade ou preço
 - Status de contas (pago quando valor pago >= valor total)
 - Alertas de estoque baixo
 - Comparações mensais
@@ -200,6 +202,8 @@ make shell-db      # Shell no banco
 - [Início Rápido](./QUICKSTART.md) - Guia rápido
 - [Modelagem do Banco](./docs/database/SCHEMA.md) - Schema completo
 - [API Documentation](./docs/api/API.md) - Documentação da API
+- [Módulo de Ordens de Serviço](./docs/ORDERS_MODULE.md) - Documentação completa do módulo de OS
+- [Evoluções Sugeridas](./docs/EVOLUCOES_SUGERIDAS.md) - Análise completa de melhorias e novas funcionalidades
 - [Guia de Deploy](./docs/deployment/DEPLOY.md) - Deploy em produção
 
 ## 🎨 Interface

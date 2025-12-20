@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Printer, Clock, User, Car, DollarSign, Package, Wrench, Play, CheckCircle, AlertCircle, XCircle, RotateCcw } from 'lucide-react';
+import { X, Printer, Clock, User, Car, DollarSign, Package, Wrench, Play, CheckCircle, AlertCircle, XCircle, RotateCcw, Receipt } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
@@ -59,6 +59,13 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'details' | 'items' | 'history'>('details');
+  const [showReceivableModal, setShowReceivableModal] = useState(false);
+  const [receivableForm, setReceivableForm] = useState({
+    use_installments: false,
+    installment_count: 2,
+    first_due_date: '',
+    payment_method: '',
+  });
 
   useEffect(() => {
     if (orderId) {
@@ -92,8 +99,263 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
     }
   };
 
-  const handlePrint = () => {
-    window.print();
+  const handleGenerateReceivable = async () => {
+    if (!orderId || !order) return;
+
+    try {
+      const data: any = {};
+      if (receivableForm.use_installments) {
+        data.use_installments = true;
+        data.installment_count = receivableForm.installment_count;
+        data.first_due_date = receivableForm.first_due_date || new Date().toISOString().split('T')[0];
+      }
+      if (receivableForm.payment_method) {
+        data.payment_method = receivableForm.payment_method;
+      }
+
+      await api.post(`/orders/${orderId}/generate-receivable`, data);
+      toast.success('Conta a receber gerada com sucesso!');
+      setShowReceivableModal(false);
+      setReceivableForm({
+        use_installments: false,
+        installment_count: 2,
+        first_due_date: '',
+        payment_method: '',
+      });
+      onUpdate();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Erro ao gerar conta a receber');
+    }
+  };
+
+  const handlePrint = async () => {
+    if (!order) return;
+
+    try {
+      toast.loading('Gerando PDF da OS...', { id: 'export-os-pdf' });
+
+      // Import dinâmico
+      const { default: jsPDF } = await import('jspdf');
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const margin = 15;
+      let yPosition = margin;
+
+      // Função para adicionar nova página se necessário
+      const checkNewPage = (requiredHeight: number) => {
+        if (yPosition + requiredHeight > pageHeight - margin) {
+          pdf.addPage();
+          yPosition = margin;
+          return true;
+        }
+        return false;
+      };
+
+      // Cabeçalho
+      pdf.setFillColor(249, 115, 22); // Laranja #f97316
+      pdf.rect(0, 0, pageWidth, 35, 'F');
+      
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(24);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('ORDEM DE SERVIÇO', pageWidth / 2, 15, { align: 'center' });
+      
+      pdf.setFontSize(18);
+      pdf.text(order.order_number, pageWidth / 2, 25, { align: 'center' });
+
+      yPosition = 45;
+
+      // Dados da OS
+      pdf.setTextColor(30, 41, 59);
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Dados da Ordem de Serviço', margin, yPosition);
+      yPosition += 8;
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      const osData = [
+        ['Status:', getStatusLabel(order.status)],
+        ['Data de Criação:', formatDateForPDF(order.created_at)],
+        order.started_at ? ['Data de Início:', formatDateForPDF(order.started_at)] : null,
+        order.finished_at ? ['Data de Finalização:', formatDateForPDF(order.finished_at)] : null,
+      ].filter(Boolean) as string[][];
+
+      osData.forEach(([label, value]) => {
+        checkNewPage(8);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(label, margin, yPosition);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(value, margin + 40, yPosition);
+        yPosition += 6;
+      });
+
+      yPosition += 5;
+      checkNewPage(20);
+
+      // Dados do Cliente
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(10);
+      pdf.text('Cliente', margin, yPosition);
+      yPosition += 8;
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text(order.client_name || '-', margin, yPosition);
+      yPosition += 6;
+
+      // Dados do Veículo
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(10);
+      pdf.text('Veículo', margin, yPosition);
+      yPosition += 8;
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      const vehicleInfo = `${order.brand || ''} ${order.model || ''}`.trim();
+      pdf.text(vehicleInfo || '-', margin, yPosition);
+      if (order.plate) {
+        yPosition += 6;
+        pdf.text(`Placa: ${order.plate}`, margin, yPosition);
+      }
+      yPosition += 6;
+
+      // Mecânico (se houver)
+      if (order.mechanic_name) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.text('Mecânico', margin, yPosition);
+        yPosition += 8;
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        pdf.text(order.mechanic_name, margin, yPosition);
+        yPosition += 6;
+      }
+
+      yPosition += 5;
+      checkNewPage(30);
+
+      // Tabela de Itens
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(10);
+      pdf.text('Itens da Ordem de Serviço', margin, yPosition);
+      yPosition += 8;
+
+      if (order.items && order.items.length > 0) {
+        // Cabeçalho da tabela
+        pdf.setFillColor(248, 250, 252);
+        pdf.rect(margin, yPosition - 5, pageWidth - 2 * margin, 8, 'F');
+        
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Item', margin + 2, yPosition);
+        pdf.text('Qtd', pageWidth - margin - 70, yPosition);
+        pdf.text('Unit.', pageWidth - margin - 50, yPosition);
+        pdf.text('Total', pageWidth - margin - 25, yPosition);
+        yPosition += 8;
+
+        pdf.setFont('helvetica', 'normal');
+        order.items.forEach((item, index) => {
+          checkNewPage(10);
+          
+          // Alternar cor de fundo
+          if (index % 2 === 0) {
+            pdf.setFillColor(255, 255, 255);
+          } else {
+            pdf.setFillColor(248, 250, 252);
+          }
+          pdf.rect(margin, yPosition - 4, pageWidth - 2 * margin, 7, 'F');
+
+          pdf.setFontSize(8);
+          pdf.text(item.description || '-', margin + 2, yPosition);
+          pdf.text(item.quantity.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), pageWidth - margin - 70, yPosition, { align: 'right' });
+          pdf.text(formatCurrencyForPDF(item.unit_price), pageWidth - margin - 50, yPosition, { align: 'right' });
+          pdf.text(formatCurrencyForPDF(item.total_price), pageWidth - margin - 25, yPosition, { align: 'right' });
+          yPosition += 7;
+        });
+      } else {
+        pdf.setFontSize(9);
+        pdf.text('Nenhum item adicionado', margin, yPosition);
+        yPosition += 6;
+      }
+
+      yPosition += 5;
+      checkNewPage(25);
+
+      // Totais
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(10);
+      pdf.text('Resumo Financeiro', margin, yPosition);
+      yPosition += 8;
+
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Subtotal:', pageWidth - margin - 50, yPosition);
+      pdf.text(formatCurrencyForPDF(order.subtotal), pageWidth - margin - 5, yPosition, { align: 'right' });
+      yPosition += 7;
+
+      pdf.text('Desconto:', pageWidth - margin - 50, yPosition);
+      pdf.text(formatCurrencyForPDF(order.discount), pageWidth - margin - 5, yPosition, { align: 'right' });
+      yPosition += 7;
+
+      pdf.setFillColor(16, 185, 129, 0.1); // Verde claro
+      pdf.rect(margin, yPosition - 5, pageWidth - 2 * margin, 8, 'F');
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(11);
+      pdf.setTextColor(16, 185, 129);
+      pdf.text('TOTAL:', pageWidth - margin - 50, yPosition);
+      pdf.text(formatCurrencyForPDF(order.total), pageWidth - margin - 5, yPosition, { align: 'right' });
+      
+      pdf.setTextColor(30, 41, 59);
+      yPosition += 10;
+      checkNewPage(20);
+
+      // Observações Técnicas
+      if (order.technical_notes) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.text('Observações Técnicas', margin, yPosition);
+        yPosition += 8;
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        const notesLines = pdf.splitTextToSize(order.technical_notes, pageWidth - 2 * margin);
+        notesLines.forEach((line: string) => {
+          checkNewPage(6);
+          pdf.text(line, margin, yPosition);
+          yPosition += 6;
+        });
+        yPosition += 5;
+      }
+
+      // Rodapé
+      const totalPages = pdf.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.setTextColor(100, 116, 139);
+        pdf.text(
+          `Página ${i} de ${totalPages} - Gerado em ${new Date().toLocaleString('pt-BR')}`,
+          pageWidth / 2,
+          pageHeight - 10,
+          { align: 'center' }
+        );
+      }
+
+      // Salvar PDF
+      const fileName = `OS_${order.order_number}_${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+
+      toast.success('PDF gerado com sucesso!', { id: 'export-os-pdf' });
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      toast.error('Erro ao gerar PDF da OS', { id: 'export-os-pdf' });
+      // Fallback para impressão nativa
+      window.print();
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -103,9 +365,23 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
     }).format(value);
   };
 
+  const formatCurrencyForPDF = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  };
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleString('pt-BR');
+  };
+
+  const formatDateForPDF = (dateString?: string) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('pt-BR') + ' ' + new Date(dateString).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   };
 
   const getStatusColor = (status: string) => {
@@ -242,10 +518,14 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
                 border: 'none',
                 borderRadius: '6px',
                 cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
               }}
-              title="Imprimir"
+              title="Gerar PDF da OS"
             >
               <Printer size={20} color="#64748b" />
+              <span style={{ fontSize: '0.875rem', color: '#64748b' }}>PDF</span>
             </button>
             <button
               onClick={onClose}
@@ -263,8 +543,8 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
         </div>
 
         {/* Quick Actions */}
-        {getQuickActions().length > 0 && (
-          <div style={{ padding: '1rem 1.5rem', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        {(getQuickActions().length > 0 || order.status === 'finished') && (
+          <div style={{ padding: '1rem 1.5rem', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
             {getQuickActions().map((action) => {
               const Icon = action.icon;
               return (
@@ -283,13 +563,48 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
                     cursor: 'pointer',
                     fontWeight: '600',
                     fontSize: '0.875rem',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = action.color + '30';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = action.color + '20';
                   }}
                 >
-                  <Icon size={16} />
+                  <Icon size={18} />
                   {action.label}
                 </button>
               );
             })}
+            {order.status === 'finished' && (
+              <button
+                onClick={() => setShowReceivableModal(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.5rem 1rem',
+                  backgroundColor: '#f9731620',
+                  color: '#f97316',
+                  border: '1px solid #f9731640',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '0.875rem',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f9731630';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f9731620';
+                }}
+              >
+                <Receipt size={18} />
+                Gerar Conta a Receber
+              </button>
+            )}
           </div>
         )}
 
@@ -517,6 +832,176 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
           )}
         </div>
       </div>
+
+      {/* Modal Gerar Conta a Receber */}
+      {showReceivableModal && order && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1003,
+          }}
+          onClick={() => setShowReceivableModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '2rem',
+              width: '90%',
+              maxWidth: '500px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>
+              Gerar Conta a Receber
+            </h2>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '1rem' }}>
+                <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.5rem' }}>OS: {order.order_number}</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#1e293b' }}>
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total)}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', marginBottom: '0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={receivableForm.use_installments}
+                    onChange={(e) => setReceivableForm({ ...receivableForm, use_installments: e.target.checked })}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  Dividir em parcelas
+                </label>
+              </div>
+
+              {receivableForm.use_installments && (
+                <>
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                      Número de Parcelas
+                    </label>
+                    <input
+                      type="number"
+                      min="2"
+                      max="24"
+                      value={receivableForm.installment_count}
+                      onChange={(e) => setReceivableForm({ ...receivableForm, installment_count: parseInt(e.target.value) || 2 })}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        fontSize: '0.9rem',
+                      }}
+                    />
+                  </div>
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                      Data da Primeira Parcela
+                    </label>
+                    <input
+                      type="date"
+                      value={receivableForm.first_due_date}
+                      onChange={(e) => setReceivableForm({ ...receivableForm, first_due_date: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        fontSize: '0.9rem',
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+
+              {!receivableForm.use_installments && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    Data de Vencimento (padrão: 30 dias)
+                  </label>
+                  <input
+                    type="date"
+                    value={receivableForm.first_due_date}
+                    onChange={(e) => setReceivableForm({ ...receivableForm, first_due_date: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+              )}
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                  Método de Pagamento (opcional)
+                </label>
+                <select
+                  value={receivableForm.payment_method}
+                  onChange={(e) => setReceivableForm({ ...receivableForm, payment_method: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem',
+                  }}
+                >
+                  <option value="">Selecione (opcional)</option>
+                  <option value="cash">Dinheiro</option>
+                  <option value="credit_card">Cartão de Crédito</option>
+                  <option value="debit_card">Cartão de Débito</option>
+                  <option value="pix">PIX</option>
+                  <option value="bank_transfer">Transferência Bancária</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowReceivableModal(false)}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: '#f1f5f9',
+                  color: '#64748b',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleGenerateReceivable}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: '#f97316',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                }}
+              >
+                Gerar Conta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

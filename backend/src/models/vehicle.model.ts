@@ -6,7 +6,7 @@ export class VehicleModel {
     let query = `
       SELECT v.id, v.client_id, v.brand, v.model, v.year, v.plate, v.chassis,
              v.color, v.mileage, v.notes, v.created_at, v.updated_at,
-             c.name as client_name
+             COALESCE(c.cpf, c.cnpj) as client_cpf
       FROM vehicles v
       LEFT JOIN clients c ON v.client_id = c.id
       WHERE 1=1
@@ -26,7 +26,8 @@ export class VehicleModel {
         v.model ILIKE $${paramCount} OR 
         v.plate ILIKE $${paramCount} OR
         v.chassis ILIKE $${paramCount} OR
-        c.name ILIKE $${paramCount}
+        c.cpf ILIKE $${paramCount} OR
+        c.cnpj ILIKE $${paramCount}
       )`;
       params.push(`%${search}%`);
       paramCount++;
@@ -42,7 +43,7 @@ export class VehicleModel {
     const result = await pool.query(
       `SELECT v.id, v.client_id, v.brand, v.model, v.year, v.plate, v.chassis,
               v.color, v.mileage, v.notes, v.created_at, v.updated_at,
-              c.name as client_name
+              COALESCE(c.cpf, c.cnpj) as client_cpf
        FROM vehicles v
        LEFT JOIN clients c ON v.client_id = c.id
        WHERE v.id = $1`,

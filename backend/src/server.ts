@@ -16,6 +16,9 @@ import reportRoutes from './routes/report.routes';
 import laborTypeRoutes from './routes/labor-type.routes';
 import categoryRoutes from './routes/category.routes';
 import dashboardRoutes from './routes/dashboard.routes';
+import userRoutes from './routes/user.routes';
+import warrantyRoutes from './routes/warranty.routes';
+import orderTemplateRoutes from './routes/order-template.routes';
 
 const app = express();
 
@@ -45,11 +48,15 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Rate limiting
+// Rate limiting - aumentado para evitar 429 em desenvolvimento
 const limiter = rateLimit({
   windowMs: env.rateLimitWindowMs,
-  max: env.rateLimitMaxRequests,
+  max: env.rateLimitMaxRequests * 5, // Aumenta limite em 5x para desenvolvimento
   message: 'Muitas requisições deste IP, tente novamente mais tarde.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Não contar requisições de health check
+  skip: (req) => req.path === '/health' || req.path === '/api/health',
 });
 app.use('/api/', limiter);
 
@@ -76,6 +83,9 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/labor-types', laborTypeRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/warranties', warrantyRoutes);
+app.use('/api/order-templates', orderTemplateRoutes);
 
 // 404 handler
 app.use((req, res) => {

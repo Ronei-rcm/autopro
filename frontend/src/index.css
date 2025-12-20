@@ -198,6 +198,10 @@ textarea:focus-visible {
   }
 }
 
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
 @keyframes pulse {
   0%, 100% {
     opacity: 1;

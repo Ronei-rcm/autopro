@@ -1,5 +1,6 @@
 import pool from '../config/database';
 import { AccountReceivable } from '../types';
+import { InstallmentModel } from './installment.model';
 
 export class AccountReceivableModel {
   static async findAll(
@@ -46,7 +47,16 @@ export class AccountReceivableModel {
     query += ' ORDER BY ar.due_date ASC';
 
     const result = await pool.query(query, params);
-    return result.rows;
+    
+    // Buscar parcelas para cada conta a receber
+    const receivablesWithInstallments = await Promise.all(
+      result.rows.map(async (receivable) => {
+        const installments = await InstallmentModel.findByReceivableId(receivable.id);
+        return { ...receivable, installments };
+      })
+    );
+    
+    return receivablesWithInstallments;
   }
 
   static async findById(id: number): Promise<AccountReceivable | null> {
@@ -142,7 +152,7 @@ export class AccountReceivableModel {
 
     values.push(id);
     const result = await pool.query(
-      `UPDATE accounts_receivable SET ${dbFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+      `UPDATE accounts_receivable SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP
        WHERE id = $${paramCount}
        RETURNING id, order_id, client_id, description, due_date, amount,
                  received_amount as paid_amount, received_at as payment_date, payment_method, status, notes,

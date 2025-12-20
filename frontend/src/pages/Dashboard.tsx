@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Users, FileText, DollarSign, Package, Calendar, TrendingUp, AlertTriangle, Clock } from 'lucide-react';
+import { Users, FileText, DollarSign, Package, Calendar, TrendingUp, AlertTriangle, Clock, RefreshCw } from 'lucide-react';
+import toast from 'react-hot-toast';
 import api from '../services/api';
 import KPICard from '../components/dashboard/KPICard';
 import SkeletonLoader from '../components/common/SkeletonLoader';
@@ -43,6 +44,7 @@ const Dashboard = () => {
       setData(response.data);
     } catch (error: any) {
       console.error('Erro ao carregar dashboard:', error);
+      toast.error(error.response?.data?.error || 'Erro ao carregar dados do dashboard');
     } finally {
       setLoading(false);
     }
@@ -123,19 +125,47 @@ const Dashboard = () => {
   return (
     <div>
       {/* Header */}
-      <header style={{ marginBottom: '2rem' }}>
-        <h1 style={{ 
-          fontSize: 'clamp(1.5rem, 4vw, 1.875rem)', 
-          fontWeight: 'bold', 
-          color: '#1e293b', 
-          marginBottom: '0.5rem',
-          lineHeight: '1.2',
-        }}>
-          Dashboard
-        </h1>
-        <p style={{ color: '#64748b', fontSize: 'clamp(0.875rem, 2vw, 0.9rem)' }}>
-          Visão geral do seu negócio
-        </p>
+      <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 style={{ 
+            fontSize: 'clamp(1.5rem, 4vw, 1.875rem)', 
+            fontWeight: 'bold', 
+            color: '#1e293b', 
+            marginBottom: '0.5rem',
+            lineHeight: '1.2',
+          }}>
+            Dashboard
+          </h1>
+          <p style={{ color: '#64748b', fontSize: 'clamp(0.875rem, 2vw, 0.9rem)' }}>
+            Visão geral do seu negócio
+          </p>
+        </div>
+        <button
+          onClick={loadDashboard}
+          disabled={loading}
+          style={{
+            padding: '0.5rem 1rem',
+            backgroundColor: '#f97316',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            fontSize: '0.875rem',
+            fontWeight: '600',
+            opacity: loading ? 0.6 : 1,
+            transition: 'opacity 0.2s',
+          }}
+          title="Atualizar dados"
+        >
+          <RefreshCw 
+            size={16} 
+            className={loading ? 'spinning' : ''}
+          />
+          Atualizar
+        </button>
       </header>
 
       {/* KPIs */}

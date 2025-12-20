@@ -240,7 +240,16 @@ Lista todas as categorias de produtos.
 
 ---
 
-## 📋 Ordens de Serviço
+## 📋 Ordens de Serviço (OS)
+
+O módulo de Ordens de Serviço oferece funcionalidades completas para gestão de OS, incluindo cálculo automático de totais, validações avançadas e controle de estoque integrado.
+
+#### Recursos Principais
+- ✨ Cálculo automático de totais em tempo real
+- ✅ Validações de quantidade e preço
+- 📦 Controle de estoque com alertas visuais
+- 💰 Preenchimento automático de preços
+- 🔄 Atualização automática de totais ao adicionar/remover itens
 
 ### GET /orders
 Lista todas as ordens de serviço.
@@ -254,6 +263,11 @@ Lista todas as ordens de serviço.
 ### GET /orders/:id
 Busca uma ordem específica (com itens e histórico).
 
+**Response inclui:**
+- Dados da ordem
+- Array de `items` (produtos e serviços)
+- Array de `history` (histórico de alterações)
+
 ### POST /orders
 Cria uma nova ordem de serviço.
 
@@ -264,35 +278,51 @@ Cria uma nova ordem de serviço.
   "vehicle_id": 1,
   "mechanic_id": 2,
   "status": "open",
-  "discount": 0
+  "discount": 0,
+  "technical_notes": "Observações técnicas opcionais"
 }
 ```
 
 ### PUT /orders/:id
 Atualiza uma ordem.
 
+**Body:** (todos os campos opcionais)
+```json
+{
+  "status": "in_progress",
+  "discount": 50.00,
+  "technical_notes": "Atualização de notas"
+}
+```
+
 ### DELETE /orders/:id
 Remove uma ordem.
 
 ### POST /orders/:id/items
-Adiciona um item à ordem.
+Adiciona um item à ordem. **Atualiza automaticamente os totais da OS.**
 
 **Body:**
 ```json
 {
   "item_type": "product",
   "product_id": 1,
+  "labor_id": null,
   "description": "Óleo Motor",
   "quantity": 5,
   "unit_price": 45.00
 }
 ```
 
+**Validações:**
+- Se `item_type` for `"product"`, verifica estoque disponível
+- Se estoque insuficiente, retorna erro 400
+- Cria movimentação de saída no estoque automaticamente
+
 ### DELETE /orders/:id/items/:itemId
-Remove um item da ordem.
+Remove um item da ordem. **Atualiza automaticamente os totais e reverte movimentação de estoque se for produto.**
 
 ### PUT /orders/:id/discount
-Atualiza o desconto da ordem.
+Atualiza o desconto da ordem. **Recalcula automaticamente o total.**
 
 **Body:**
 ```json
@@ -302,7 +332,7 @@ Atualiza o desconto da ordem.
 ```
 
 ### POST /orders/:id/quick-action
-Executa uma ação rápida.
+Executa uma ação rápida na ordem.
 
 **Body:**
 ```json
@@ -311,10 +341,35 @@ Executa uma ação rápida.
 }
 ```
 
-**Actions:** `start`, `finish`, `wait_parts`, `cancel`, `reopen`
+**Actions disponíveis:**
+- `start` - Inicia a OS (muda status para `in_progress` e define `started_at`)
+- `finish` - Finaliza a OS (muda status para `finished` e define `finished_at`)
+- `wait_parts` - Coloca em espera por peças (muda status para `waiting_parts`)
+- `cancel` - Cancela a OS (muda status para `cancelled`)
+- `reopen` - Reabre uma OS finalizada/cancelada (muda status para `open`)
+
+**Nota:** Cada ação registra automaticamente no histórico da ordem.
 
 ### GET /orders/statistics/overview
 Retorna estatísticas das ordens de serviço.
+
+**Response:**
+```json
+{
+  "total": 150,
+  "byStatus": {
+    "open": 10,
+    "in_progress": 5,
+    "waiting_parts": 3,
+    "finished": 120,
+    "cancelled": 12
+  },
+  "values": {
+    "finished": 45000.00,
+    "total": 50000.00
+  }
+}
+```
 
 ---
 
