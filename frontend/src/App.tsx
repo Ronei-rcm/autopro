@@ -62,6 +62,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const Warranties = lazy(() => import('./pages/Warranties'));
 const OrderTemplates = lazy(() => import('./pages/OrderTemplates'));
 const Checklists = lazy(() => import('./pages/Checklists'));
+const Quotes = lazy(() => import('./pages/Quotes'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -269,6 +270,19 @@ function App() {
                   <MainLayout>
                     <Suspense fallback={<PageLoader />}>
                       <Checklists />
+                    </Suspense>
+                    <HelpAssistant />
+                  </MainLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/orcamentos"
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Suspense fallback={<PageLoader />}>
+                      <Quotes />
                     </Suspense>
                     <HelpAssistant />
                   </MainLayout>

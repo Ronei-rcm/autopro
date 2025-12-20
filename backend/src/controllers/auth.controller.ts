@@ -103,6 +103,10 @@ export class AuthController {
 
   static async me(req: AuthRequest, res: Response): Promise<void> {
     try {
+      if (!req.userId) {
+        res.status(401).json({ error: 'Usuário não autenticado' });
+        return;
+      }
       const user = await UserModel.findById(req.userId);
       if (!user) {
         res.status(404).json({ error: 'Usuário não encontrado' });

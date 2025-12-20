@@ -287,6 +287,51 @@ const Orders = () => {
     }
   };
 
+  const handleUpdateItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentOrder || !editingItem) return;
+
+    // Validações
+    if (!itemFormData.description.trim()) {
+      toast.error('Descrição é obrigatória');
+      return;
+    }
+
+    const quantity = parseFloat(itemFormData.quantity);
+    const unitPrice = parseFloat(itemFormData.unit_price);
+
+    if (quantity <= 0) {
+      toast.error('Quantidade deve ser maior que zero');
+      return;
+    }
+
+    if (unitPrice <= 0) {
+      toast.error('Preço unitário deve ser maior que zero');
+      return;
+    }
+
+    try {
+      const data = {
+        description: itemFormData.description,
+        quantity: quantity,
+        unit_price: unitPrice,
+      };
+
+      await api.put(`/orders/${currentOrder.id}/items/${editingItem.id}`, data);
+      toast.success('Item atualizado com sucesso!');
+      resetItemForm();
+      await loadOrderItems(currentOrder.id);
+      // Recarregar ordem atualizada
+      const orderResponse = await api.get(`/orders/${currentOrder.id}`);
+      setCurrentOrder(orderResponse.data);
+      loadOrders();
+      loadProducts(); // Recarregar produtos para atualizar estoque
+      loadStatistics();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Erro ao atualizar item');
+    }
+  };
+
   const handleSubmitItem = editingItem ? handleUpdateItem : handleAddItem;
 
   const handleRemoveItem = async (itemId: number) => {
@@ -321,6 +366,7 @@ const Orders = () => {
       status: order.status,
       discount: order.discount.toString(),
       technical_notes: order.technical_notes || '',
+      template_id: '', // Templates não são editáveis em OS existentes
     });
     loadVehicles(order.client_id);
     setShowModal(true);
@@ -400,51 +446,6 @@ const Orders = () => {
       unit_price: item.unit_price.toString(),
     });
     setItemTotal(item.total_price);
-  };
-
-  const handleUpdateItem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentOrder || !editingItem) return;
-
-    // Validações
-    if (!itemFormData.description.trim()) {
-      toast.error('Descrição é obrigatória');
-      return;
-    }
-
-    const quantity = parseFloat(itemFormData.quantity);
-    const unitPrice = parseFloat(itemFormData.unit_price);
-
-    if (quantity <= 0) {
-      toast.error('Quantidade deve ser maior que zero');
-      return;
-    }
-
-    if (unitPrice <= 0) {
-      toast.error('Preço unitário deve ser maior que zero');
-      return;
-    }
-
-    try {
-      const data = {
-        description: itemFormData.description,
-        quantity: quantity,
-        unit_price: unitPrice,
-      };
-
-      await api.put(`/orders/${currentOrder.id}/items/${editingItem.id}`, data);
-      toast.success('Item atualizado com sucesso!');
-      resetItemForm();
-      await loadOrderItems(currentOrder.id);
-      // Recarregar ordem atualizada
-      const orderResponse = await api.get(`/orders/${currentOrder.id}`);
-      setCurrentOrder(orderResponse.data);
-      loadOrders();
-      loadProducts(); // Recarregar produtos para atualizar estoque
-      loadStatistics();
-    } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Erro ao atualizar item');
-    }
   };
 
   const formatCurrency = (value: number) => {

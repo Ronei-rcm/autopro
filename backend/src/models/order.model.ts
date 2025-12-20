@@ -83,6 +83,19 @@ export class OrderModel {
     return result.rows[0] || null;
   }
 
+  static async updateSignature(
+    id: number,
+    signature: string,
+    signedByName: string
+  ): Promise<boolean> {
+    const result = await pool.query(
+      `UPDATE orders SET client_signature = $1, signature_date = CURRENT_TIMESTAMP, signed_by_name = $2, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3`,
+      [signature, signedByName, id]
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
   static async create(data: Omit<Order, 'id' | 'created_at' | 'updated_at'>): Promise<Order> {
     const {
       quote_id,
@@ -106,7 +119,8 @@ export class OrderModel {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING id, quote_id, client_id, vehicle_id, mechanic_id, order_number,
                 status, subtotal, discount, total, started_at, finished_at,
-                technical_notes, created_at, updated_at`,
+                technical_notes, client_signature, signature_date, signed_by_name,
+                created_at, updated_at`,
       [
         quote_id || null,
         client_id,
@@ -145,6 +159,9 @@ export class OrderModel {
       'started_at',
       'finished_at',
       'technical_notes',
+      'client_signature',
+      'signature_date',
+      'signed_by_name',
     ];
 
     allowedFields.forEach((field) => {
@@ -159,21 +176,22 @@ export class OrderModel {
       return this.findById(id) as Promise<Order>;
     }
 
-    values.push(id);
-    const result = await pool.query(
-      `UPDATE orders SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $${paramCount}
-       RETURNING id, quote_id, client_id, vehicle_id, mechanic_id, order_number,
-                 status, subtotal, discount, total, started_at, finished_at,
-                 technical_notes, created_at, updated_at`,
-      values
-    );
+      values.push(id);
+      const result = await pool.query(
+        `UPDATE orders SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $${paramCount}
+         RETURNING id, quote_id, client_id, vehicle_id, mechanic_id, order_number,
+                   status, subtotal, discount, total, started_at, finished_at,
+                   technical_notes, client_signature, signature_date, signed_by_name,
+                   created_at, updated_at`,
+        values
+      );
     return result.rows[0];
   }
 
   static async delete(id: number): Promise<boolean> {
     const result = await pool.query('DELETE FROM orders WHERE id = $1', [id]);
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   static async generateOrderNumber(): Promise<string> {
@@ -221,7 +239,7 @@ export class OrderModel {
 
   static async removeItem(itemId: number): Promise<boolean> {
     const result = await pool.query('DELETE FROM order_items WHERE id = $1', [itemId]);
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   static async updateItem(itemId: number, data: Partial<Omit<OrderItem, 'id' | 'order_id'>>): Promise<OrderItem | null> {

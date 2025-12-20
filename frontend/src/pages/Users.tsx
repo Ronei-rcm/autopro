@@ -578,7 +578,7 @@ const Users = () => {
         cancelText="Cancelar"
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteConfirm({ isOpen: false, user: null })}
-        confirmColor="#ef4444"
+        type="danger"
       />
     </div>
   );

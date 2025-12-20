@@ -12,20 +12,21 @@
 
 #### Frontend
 - **React 18** - Biblioteca UI
-- **TypeScript** - Tipagem estática
-- **Vite** - Build tool e dev server
-- **React Router DOM** - Roteamento
+- **TypeScript 5.9.3** - Tipagem estática (atualizado)
+- **Vite 5** - Build tool e dev server
+- **React Router DOM 6** - Roteamento
 - **Recharts** - Gráficos e visualizações
 - **Axios** - Cliente HTTP
 - **React Hot Toast** - Notificações
-- **Lucide React** - Ícones
+- **Lucide React 0.562.0** - Ícones (atualizado)
 - **jsPDF + html2canvas** - Exportação de PDFs
+- **React Hook Form 7.69.0** - Gerenciamento de formulários (atualizado)
 
 #### Backend
-- **Node.js** - Runtime
-- **Express** - Framework web
-- **TypeScript** - Tipagem estática
-- **PostgreSQL** - Banco de dados
+- **Node.js 18+** - Runtime
+- **Express 4** - Framework web
+- **TypeScript 5.9.3** - Tipagem estática (atualizado)
+- **PostgreSQL 15** - Banco de dados
 - **JWT** - Autenticação
 - **Bcrypt** - Hash de senhas
 - **Express Validator** - Validação

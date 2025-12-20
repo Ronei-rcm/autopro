@@ -6,6 +6,7 @@ import { OrderHistoryModel } from '../models/order-history.model';
 import { AccountReceivableModel } from '../models/account-receivable.model';
 import { InstallmentModel } from '../models/installment.model';
 import { OrderTemplateModel } from '../models/order-template.model';
+import { OrderFileModel } from '../models/order-file.model';
 import { body, validationResult } from 'express-validator';
 import { AuthRequest } from '../middleware/auth.middleware';
 import pool from '../config/database';
@@ -42,7 +43,8 @@ export class OrderController {
 
       const items = await OrderModel.getItems(id);
       const history = await OrderHistoryModel.findByOrder(id);
-      res.json({ ...order, items, history });
+      const files = await OrderFileModel.findByOrder(id);
+      res.json({ ...order, items, history, files });
     } catch (error) {
       console.error('Get order error:', error);
       res.status(500).json({ error: 'Erro ao buscar ordem de serviço' });
@@ -70,9 +72,10 @@ export class OrderController {
         if (template && template.items && template.items.length > 0) {
           for (const item of template.items) {
             try {
-              await OrderModel.addItem(order.id, {
-                product_id: item.product_id || undefined,
-                labor_id: item.labor_id || undefined,
+              await OrderModel.addItem({
+                order_id: order.id,
+                product_id: item.product_id || null,
+                labor_id: item.labor_id || null,
                 description: item.description,
                 quantity: item.quantity,
                 unit_price: item.unit_price,
@@ -432,10 +435,14 @@ export class OrderController {
       }
 
       // Criar conta a receber
+      const orderWithVehicle = order as any; // Order pode ter brand/model do JOIN
+      const vehicleInfo = orderWithVehicle.brand || orderWithVehicle.model 
+        ? `${orderWithVehicle.brand || ''} ${orderWithVehicle.model || ''}`.trim()
+        : '';
       const receivableData = {
         order_id: orderId,
         client_id: order.client_id,
-        description: `OS ${order.order_number} - ${order.brand || ''} ${order.model || ''}`.trim(),
+        description: `OS ${order.order_number}${vehicleInfo ? ` - ${vehicleInfo}` : ''}`.trim(),
         due_date: defaultDueDate,
         amount: order.total,
         paid_amount: 0,
@@ -608,6 +615,131 @@ export class OrderController {
       res.status(500).json({ error: 'Erro ao executar ação' });
     }
   }
+
+  static async saveSignature(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
+      }
+
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'ID inválido' });
+        return;
+      }
+
+      const { signature, signed_by_name } = req.body;
+
+      const order = await OrderModel.findById(id);
+      if (!order) {
+        res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+        return;
+      }
+
+      await OrderModel.updateSignature(id, signature, signed_by_name);
+      
+      // Registrar no histórico
+      await OrderHistoryModel.create({
+        order_id: id,
+        field_changed: 'Assinatura do Cliente',
+        new_value: 'Assinatura registrada',
+        changed_by: req.userId || undefined,
+        notes: `Assinado por: ${signed_by_name}`,
+      });
+
+      res.json({ message: 'Assinatura salva com sucesso' });
+    } catch (error: any) {
+      console.error('Save signature error:', error);
+      res.status(500).json({ error: 'Erro ao salvar assinatura' });
+    }
+  }
+
+  static async uploadFile(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'ID inválido' });
+        return;
+      }
+
+      const { file_data, file_name, file_type, description } = req.body;
+
+      if (!file_data || !file_name) {
+        res.status(400).json({ error: 'Dados do arquivo são obrigatórios' });
+        return;
+      }
+
+      const order = await OrderModel.findById(id);
+      if (!order) {
+        res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+        return;
+      }
+
+      // Salvar arquivo (armazenando base64 no banco por simplicidade)
+      // Para produção, idealmente salvar em storage (S3, etc) e guardar apenas o path
+      const file = await OrderFileModel.create({
+        order_id: id,
+        file_name,
+        file_path: file_data, // Armazenando base64 diretamente por simplicidade
+        file_type: file_type || 'photo',
+        file_size: Buffer.from(file_data, 'base64').length,
+        description: description || null,
+        uploaded_by: req.userId || undefined,
+      });
+
+      res.status(201).json(file);
+    } catch (error: any) {
+      console.error('Upload file error:', error);
+      res.status(500).json({ error: 'Erro ao fazer upload do arquivo' });
+    }
+  }
+
+  static async deleteFile(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const id = parseInt(req.params.id);
+      const fileId = parseInt(req.params.fileId);
+
+      if (isNaN(id) || isNaN(fileId)) {
+        res.status(400).json({ error: 'IDs inválidos' });
+        return;
+      }
+
+      const file = await OrderFileModel.findById(fileId);
+      if (!file || file.order_id !== id) {
+        res.status(404).json({ error: 'Arquivo não encontrado' });
+        return;
+      }
+
+      await OrderFileModel.delete(fileId);
+      res.status(204).send();
+    } catch (error: any) {
+      console.error('Delete file error:', error);
+      res.status(500).json({ error: 'Erro ao excluir arquivo' });
+    }
+  }
+
+  static async getFile(req: Request, res: Response): Promise<void> {
+    try {
+      const fileId = parseInt(req.params.fileId);
+      if (isNaN(fileId)) {
+        res.status(400).json({ error: 'ID inválido' });
+        return;
+      }
+
+      const file = await OrderFileModel.findById(fileId);
+      if (!file) {
+        res.status(404).json({ error: 'Arquivo não encontrado' });
+        return;
+      }
+
+      res.json(file);
+    } catch (error: any) {
+      console.error('Get file error:', error);
+      res.status(500).json({ error: 'Erro ao buscar arquivo' });
+    }
+  }
 }
 
 // Validações
@@ -627,5 +759,10 @@ export const updateItemValidation = [
   body('description').optional().notEmpty().withMessage('Descrição não pode ser vazia'),
   body('quantity').optional().isFloat({ min: 0.01 }).withMessage('Quantidade deve ser positiva'),
   body('unit_price').optional().isFloat({ min: 0 }).withMessage('Preço unitário deve ser positivo'),
+];
+
+export const saveSignatureValidation = [
+  body('signature').notEmpty().withMessage('Assinatura é obrigatória'),
+  body('signed_by_name').notEmpty().withMessage('Nome de quem assinou é obrigatório'),
 ];
 

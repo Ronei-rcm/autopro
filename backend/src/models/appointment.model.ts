@@ -166,7 +166,7 @@ export class AppointmentModel {
 
   static async delete(id: number): Promise<boolean> {
     const result = await pool.query('DELETE FROM appointments WHERE id = $1', [id]);
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   static async getUpcoming(limit: number = 10): Promise<any[]> {

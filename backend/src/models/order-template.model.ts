@@ -218,6 +218,6 @@ export class OrderTemplateModel {
 
   static async delete(id: number): Promise<boolean> {
     const result = await pool.query('DELETE FROM order_templates WHERE id = $1', [id]);
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 }

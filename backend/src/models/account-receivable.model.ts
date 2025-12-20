@@ -164,7 +164,7 @@ export class AccountReceivableModel {
 
   static async delete(id: number): Promise<boolean> {
     const result = await pool.query('DELETE FROM accounts_receivable WHERE id = $1', [id]);
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   static async getSummary(): Promise<any> {

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { X, Printer, Clock, User, Car, DollarSign, Package, Wrench, Play, CheckCircle, AlertCircle, XCircle, RotateCcw, Receipt, CheckSquare, Plus as PlusIcon } from 'lucide-react';
+import { X, Printer, Clock, User, Car, DollarSign, Package, Wrench, Play, CheckCircle, AlertCircle, XCircle, RotateCcw, Receipt, CheckSquare, Plus as PlusIcon, PenTool, Image as ImageIcon, FileText as FileTextIcon, Upload, Trash2 } from 'lucide-react';
+import SignaturePad from './SignaturePad';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
@@ -21,9 +22,26 @@ interface Order {
   started_at?: string;
   finished_at?: string;
   technical_notes?: string;
+  client_signature?: string;
+  signature_date?: string;
+  signed_by_name?: string;
   created_at: string;
   items?: OrderItem[];
   history?: OrderHistory[];
+  files?: OrderFile[];
+}
+
+interface OrderFile {
+  id: number;
+  order_id: number;
+  file_name: string;
+  file_path: string;
+  file_type: 'photo' | 'document' | 'other';
+  file_size?: number;
+  description?: string;
+  uploaded_by?: number;
+  created_at: string;
+  uploaded_by_name?: string;
 }
 
 interface OrderItem {
@@ -58,7 +76,7 @@ interface OrderDetailModalProps {
 const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps) => {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'details' | 'items' | 'history' | 'checklists'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'items' | 'history' | 'checklists' | 'signature' | 'files'>('details');
   const [showReceivableModal, setShowReceivableModal] = useState(false);
   const [receivableForm, setReceivableForm] = useState({
     use_installments: false,
@@ -71,6 +89,10 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
   const [showChecklistModal, setShowChecklistModal] = useState(false);
   const [selectedChecklist, setSelectedChecklist] = useState<any>(null);
   const [checklistExecutionItems, setChecklistExecutionItems] = useState<Record<number, { checked: boolean; value?: string; observation?: string }>>({});
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [showFileUploadModal, setShowFileUploadModal] = useState(false);
+  const [signatureForm, setSignatureForm] = useState({ signed_by_name: '' });
+  const [fileUploadForm, setFileUploadForm] = useState({ file: null as File | null, file_type: 'photo' as 'photo' | 'document' | 'other', description: '' });
 
   useEffect(() => {
     if (orderId) {
@@ -177,6 +199,78 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
       loadChecklistExecutions();
     } catch (error: any) {
       toast.error('Erro ao atualizar item do checklist');
+    }
+  };
+
+  const handleSaveSignature = async (signature: string) => {
+    if (!orderId || !signatureForm.signed_by_name.trim()) {
+      toast.error('Nome de quem assinou é obrigatório');
+      return;
+    }
+
+    try {
+      await api.post(`/orders/${orderId}/signature`, {
+        signature,
+        signed_by_name: signatureForm.signed_by_name,
+      });
+      toast.success('Assinatura salva com sucesso!');
+      setShowSignatureModal(false);
+      setSignatureForm({ signed_by_name: '' });
+      loadOrder();
+      onUpdate();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Erro ao salvar assinatura');
+    }
+  };
+
+  const handleUploadFile = async () => {
+    if (!orderId || !fileUploadForm.file) {
+      toast.error('Selecione um arquivo');
+      return;
+    }
+
+    try {
+      // Converter arquivo para base64
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        const base64Data = base64.split(',')[1]; // Remove o prefixo data:image/...;base64,
+
+        try {
+          await api.post(`/orders/${orderId}/files`, {
+            file_data: base64Data,
+            file_name: fileUploadForm.file!.name,
+            file_type: fileUploadForm.file_type,
+            description: fileUploadForm.description || null,
+          });
+          toast.success('Arquivo enviado com sucesso!');
+          setShowFileUploadModal(false);
+          setFileUploadForm({ file: null, file_type: 'photo', description: '' });
+          loadOrder();
+          onUpdate();
+        } catch (error: any) {
+          toast.error(error.response?.data?.error || 'Erro ao enviar arquivo');
+        }
+      };
+      reader.onerror = () => {
+        toast.error('Erro ao ler arquivo');
+      };
+      reader.readAsDataURL(fileUploadForm.file);
+    } catch (error: any) {
+      toast.error('Erro ao processar arquivo');
+    }
+  };
+
+  const handleDeleteFile = async (fileId: number) => {
+    if (!orderId || !confirm('Tem certeza que deseja excluir este arquivo?')) return;
+
+    try {
+      await api.delete(`/orders/${orderId}/files/${fileId}`);
+      toast.success('Arquivo excluído com sucesso!');
+      loadOrder();
+      onUpdate();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Erro ao excluir arquivo');
     }
   };
 
@@ -695,6 +789,8 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
             { id: 'details', label: 'Detalhes' },
             { id: 'items', label: 'Itens' },
             { id: 'checklists', label: 'Checklists' },
+            { id: 'signature', label: 'Assinatura', icon: PenTool },
+            { id: 'files', label: 'Fotos/Docs', icon: ImageIcon },
             { id: 'history', label: 'Histórico' },
           ].map((tab) => (
             <button
@@ -710,6 +806,7 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
                 color: activeTab === tab.id ? '#1e293b' : '#64748b',
               }}
             >
+              {tab.icon && <tab.icon size={16} style={{ marginRight: '0.5rem' }} />}
               {tab.label}
             </button>
           ))}
@@ -1047,6 +1144,201 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
               ) : (
                 <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
                   Nenhum checklist executado ainda. Selecione um checklist acima para começar.
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'signature' && (
+            <div>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: '600', marginBottom: '1.5rem' }}>Assinatura do Cliente</h3>
+              
+              {order.client_signature ? (
+                <div>
+                  <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                    <div style={{ marginBottom: '0.5rem', fontSize: '0.875rem', color: '#64748b' }}>Assinatura registrada</div>
+                    <img
+                      src={order.client_signature}
+                      alt="Assinatura do cliente"
+                      style={{
+                        maxWidth: '100%',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        backgroundColor: 'white',
+                        padding: '1rem',
+                      }}
+                    />
+                    {order.signed_by_name && (
+                      <div style={{ marginTop: '1rem', fontSize: '0.875rem', color: '#64748b' }}>
+                        Assinado por: <strong>{order.signed_by_name}</strong>
+                      </div>
+                    )}
+                    {order.signature_date && (
+                      <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#64748b' }}>
+                        Em: {formatDate(order.signature_date)}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setShowSignatureModal(true)}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      backgroundColor: '#3b82f6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    <PenTool size={18} />
+                    Alterar Assinatura
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b', marginBottom: '1.5rem', border: '1px dashed #e2e8f0', borderRadius: '8px' }}>
+                    Nenhuma assinatura registrada ainda.
+                  </div>
+                  <button
+                    onClick={() => setShowSignatureModal(true)}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      backgroundColor: '#10b981',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    <PenTool size={18} />
+                    Capturar Assinatura
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'files' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: '600' }}>Fotos e Documentos</h3>
+                <button
+                  onClick={() => setShowFileUploadModal(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.5rem 1rem',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    fontSize: '0.875rem',
+                  }}
+                >
+                  <Upload size={16} />
+                  Upload Arquivo
+                </button>
+              </div>
+
+              {order.files && order.files.length > 0 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+                  {order.files.map((file) => (
+                    <div
+                      key={file.id}
+                      style={{
+                        padding: '1rem',
+                        backgroundColor: '#f8fafc',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                      }}
+                    >
+                      {file.file_type === 'photo' && file.file_path ? (
+                        <img
+                          src={`data:image/jpeg;base64,${file.file_path}`}
+                          alt={file.description || file.file_name}
+                          style={{
+                            width: '100%',
+                            height: '150px',
+                            objectFit: 'cover',
+                            borderRadius: '6px',
+                            marginBottom: '0.5rem',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => {
+                            const img = new Image();
+                            img.src = `data:image/jpeg;base64,${file.file_path}`;
+                            const w = window.open('');
+                            if (w) {
+                              w.document.write(`<img src="${img.src}" style="max-width:100%">`);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: '100%',
+                            height: '150px',
+                            backgroundColor: '#e2e8f0',
+                            borderRadius: '6px',
+                            marginBottom: '0.5rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <FileTextIcon size={48} color="#64748b" />
+                        </div>
+                      )}
+                      <div style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.25rem', color: '#1e293b' }}>
+                        {file.file_name}
+                      </div>
+                      {file.description && (
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem' }}>
+                          {file.description}
+                        </div>
+                      )}
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem' }}>
+                        {formatDate(file.created_at)}
+                        {file.uploaded_by_name && ` • ${file.uploaded_by_name}`}
+                      </div>
+                      <button
+                        onClick={() => handleDeleteFile(file.id)}
+                        style={{
+                          width: '100%',
+                          padding: '0.5rem',
+                          backgroundColor: '#fee2e2',
+                          color: '#ef4444',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                          fontSize: '0.75rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.5rem',
+                        }}
+                      >
+                        <Trash2 size={14} />
+                        Excluir
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b', border: '1px dashed #e2e8f0', borderRadius: '8px' }}>
+                  Nenhum arquivo enviado ainda. Clique em "Upload Arquivo" para começar.
                 </div>
               )}
             </div>
@@ -1455,6 +1747,211 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
                 }}
               >
                 Salvar Checklist
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Assinatura */}
+      {showSignatureModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1003,
+            padding: '1rem',
+          }}
+          onClick={() => {
+            setShowSignatureModal(false);
+            setSignatureForm({ signed_by_name: '' });
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '2rem',
+              width: '90%',
+              maxWidth: '600px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>
+              Capturar Assinatura do Cliente
+            </h2>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                Nome de quem está assinando *
+              </label>
+              <input
+                type="text"
+                value={signatureForm.signed_by_name}
+                onChange={(e) => setSignatureForm({ signed_by_name: e.target.value })}
+                placeholder="Nome completo"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '0.9rem',
+                }}
+              />
+            </div>
+            <SignaturePad
+              onSave={handleSaveSignature}
+              onCancel={() => {
+                setShowSignatureModal(false);
+                setSignatureForm({ signed_by_name: '' });
+              }}
+              initialSignature={order?.client_signature}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Modal Upload Arquivo */}
+      {showFileUploadModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1003,
+            padding: '1rem',
+          }}
+          onClick={() => {
+            setShowFileUploadModal(false);
+            setFileUploadForm({ file: null, file_type: 'photo', description: '' });
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '2rem',
+              width: '90%',
+              maxWidth: '500px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>
+              Upload de Arquivo
+            </h2>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                Tipo de Arquivo
+              </label>
+              <select
+                value={fileUploadForm.file_type}
+                onChange={(e) => setFileUploadForm({ ...fileUploadForm, file_type: e.target.value as any })}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '0.9rem',
+                }}
+              >
+                <option value="photo">Foto</option>
+                <option value="document">Documento</option>
+                <option value="other">Outro</option>
+              </select>
+            </div>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                Arquivo *
+              </label>
+              <input
+                type="file"
+                accept="image/*,.pdf,.doc,.docx"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    // Limitar tamanho (5MB)
+                    if (file.size > 5 * 1024 * 1024) {
+                      toast.error('Arquivo muito grande. Máximo 5MB');
+                      return;
+                    }
+                    setFileUploadForm({ ...fileUploadForm, file });
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '0.9rem',
+                }}
+              />
+            </div>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                Descrição (opcional)
+              </label>
+              <textarea
+                value={fileUploadForm.description}
+                onChange={(e) => setFileUploadForm({ ...fileUploadForm, description: e.target.value })}
+                rows={3}
+                placeholder="Descrição do arquivo..."
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '0.9rem',
+                  resize: 'vertical',
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFileUploadModal(false);
+                  setFileUploadForm({ file: null, file_type: 'photo', description: '' });
+                }}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: '#f1f5f9',
+                  color: '#64748b',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleUploadFile}
+                disabled={!fileUploadForm.file}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: fileUploadForm.file ? '#3b82f6' : '#cbd5e1',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: fileUploadForm.file ? 'pointer' : 'not-allowed',
+                  fontWeight: '600',
+                }}
+              >
+                <Upload size={18} style={{ marginRight: '0.5rem', display: 'inline-block', verticalAlign: 'middle' }} />
+                Enviar
               </button>
             </div>
           </div>

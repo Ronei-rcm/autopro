@@ -1,18 +1,32 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
+import {
+  QuoteController,
+  createQuoteValidation,
+  updateQuoteValidation,
+  addItemValidation,
+} from '../controllers/quote.controller';
 
 const router = Router();
 
 router.use(authenticate);
 
-// TODO: Implementar controllers
-router.get('/', (req, res) => {
-  res.json({ message: 'Listar orçamentos' });
-});
+// CRUD de Orçamentos
+router.get('/', QuoteController.list);
+router.get('/:id', QuoteController.getById);
+router.post('/', createQuoteValidation, QuoteController.create);
+router.put('/:id', updateQuoteValidation, QuoteController.update);
+router.delete('/:id', QuoteController.delete);
 
-router.post('/', (req, res) => {
-  res.json({ message: 'Criar orçamento' });
-});
+// Status
+router.patch('/:id/status', QuoteController.updateStatus);
+
+// Converter em OS
+router.post('/:id/convert-to-order', QuoteController.convertToOrder);
+
+// Itens
+router.post('/:id/items', addItemValidation, QuoteController.addItem);
+router.delete('/:id/items/:itemId', QuoteController.removeItem);
 
 export default router;
 

@@ -90,7 +90,7 @@ export class LaborTypeModel {
 
   static async delete(id: number): Promise<boolean> {
     const result = await pool.query('DELETE FROM labor_types WHERE id = $1', [id]);
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 }
 

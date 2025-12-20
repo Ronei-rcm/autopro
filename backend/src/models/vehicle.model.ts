@@ -129,7 +129,7 @@ export class VehicleModel {
 
   static async delete(id: number): Promise<boolean> {
     const result = await pool.query('DELETE FROM vehicles WHERE id = $1', [id]);
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   static async findByClient(clientId: number): Promise<Vehicle[]> {

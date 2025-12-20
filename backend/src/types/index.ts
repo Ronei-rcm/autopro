@@ -109,6 +109,9 @@ export interface Order {
   started_at?: Date;
   finished_at?: Date;
   technical_notes?: string;
+  client_signature?: string;
+  signature_date?: Date;
+  signed_by_name?: string;
   created_at: Date;
   updated_at: Date;
 }

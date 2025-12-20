@@ -217,7 +217,7 @@ export class ChecklistModel {
 
   static async delete(id: number): Promise<boolean> {
     const result = await pool.query('DELETE FROM checklists WHERE id = $1', [id]);
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   // Métodos para execução de checklist

@@ -149,7 +149,7 @@ export class ProductModel {
 
   static async delete(id: number): Promise<boolean> {
     const result = await pool.query('DELETE FROM products WHERE id = $1', [id]);
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   static async getLowStock(): Promise<Product[]> {

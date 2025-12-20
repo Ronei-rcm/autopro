@@ -16,7 +16,8 @@ import {
   UserPlus,
   Shield,
   Layers,
-  CheckSquare
+  CheckSquare,
+  Receipt
 } from 'lucide-react';
 
 const menuItems = [
@@ -25,6 +26,7 @@ const menuItems = [
   { path: '/veiculos', label: 'Veículos', icon: Car },
   { path: '/fornecedores', label: 'Fornecedores', icon: Truck },
   { path: '/estoque', label: 'Estoque', icon: Package },
+  { path: '/orcamentos', label: 'Orçamentos', icon: Receipt },
   { path: '/ordens-servico', label: 'Ordens de Serviço', icon: FileText },
   { path: '/agenda', label: 'Agenda', icon: Calendar },
   { path: '/financeiro', label: 'Financeiro', icon: DollarSign },

@@ -101,7 +101,7 @@ export class InstallmentModel {
 
   static async delete(id: number): Promise<boolean> {
     const result = await pool.query('DELETE FROM installments WHERE id = $1', [id]);
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   static async deleteByReceivableId(accountReceivableId: number): Promise<boolean> {
@@ -109,7 +109,7 @@ export class InstallmentModel {
       'DELETE FROM installments WHERE account_receivable_id = $1',
       [accountReceivableId]
     );
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   static async updateStatuses(): Promise<void> {

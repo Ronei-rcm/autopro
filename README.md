@@ -93,11 +93,12 @@ make down
 - Arquitetura MVC
 
 **Frontend:**
-- React + TypeScript + Vite
+- React 18 + TypeScript 5.9.3 + Vite
 - Context API para estado
 - React Router para navegação
 - Recharts para gráficos
 - Axios para requisições HTTP
+- Lucide React para ícones
 
 **Infraestrutura:**
 - Docker e Docker Compose

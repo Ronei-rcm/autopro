@@ -1,5 +1,5 @@
 import pool from '../config/database';
-import { Client, ClientType } from '../types';
+import { Client } from '../types';
 
 export class ClientModel {
   static async findAll(search?: string, active?: boolean): Promise<Client[]> {
@@ -154,7 +154,7 @@ export class ClientModel {
 
   static async delete(id: number): Promise<boolean> {
     const result = await pool.query('DELETE FROM clients WHERE id = $1', [id]);
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   static async count(): Promise<number> {
