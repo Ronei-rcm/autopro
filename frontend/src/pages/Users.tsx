@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, User as UserIcon, Mail, Shield, Ban, CheckCircle } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, User as UserIcon, Mail, Shield, Ban, CheckCircle, Key } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { showSuccessToast, showErrorToast } from '../components/common/ToastEnhancer';
 import SkeletonLoader from '../components/common/SkeletonLoader';
@@ -26,6 +27,7 @@ const profileLabels: Record<string, string> = {
 
 const Users = () => {
   const { user: currentUser } = useAuth();
+  const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -190,27 +192,47 @@ const Users = () => {
             Gerencie os usuários do sistema
           </p>
         </div>
-        <button
-          onClick={() => {
-            resetForm();
-            setShowModal(true);
-          }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.75rem 1.5rem',
-            backgroundColor: '#f97316',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: '600',
-          }}
-        >
-          <Plus size={20} />
-          Novo Usuário
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button
+            onClick={() => navigate('/permissoes')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.75rem 1.5rem',
+              backgroundColor: '#6366f1',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: '600',
+            }}
+          >
+            <Key size={18} />
+            Permissões
+          </button>
+          <button
+            onClick={() => {
+              resetForm();
+              setShowModal(true);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.75rem 1.5rem',
+              backgroundColor: '#f97316',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: '600',
+            }}
+          >
+            <Plus size={20} />
+            Novo Usuário
+          </button>
+        </div>
       </div>
 
       {/* Search */}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, FileText, Car, Wrench, Package, DollarSign, X, Eye, CheckCircle, Clock, AlertCircle, ArrowRight, Printer } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
@@ -6,6 +7,8 @@ import SkeletonLoader from '../components/common/SkeletonLoader';
 import AdvancedFilters from '../components/common/AdvancedFilters';
 import Pagination from '../components/common/Pagination';
 import ConfirmDialog from '../components/common/ConfirmDialog';
+import ApproveQuoteModal from '../components/quotes/ApproveQuoteModal';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Quote {
   id: number;
@@ -67,6 +70,8 @@ interface LaborType {
 }
 
 const Quotes = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -81,6 +86,8 @@ const Quotes = () => {
   const [showModal, setShowModal] = useState(false);
   const [showItemModal, setShowItemModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [approveQuote, setApproveQuote] = useState<Quote | null>(null);
   const [selectedQuoteId, setSelectedQuoteId] = useState<number | null>(null);
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
   const [currentQuote, setCurrentQuote] = useState<Quote | null>(null);
@@ -116,6 +123,20 @@ const Quotes = () => {
     loadProducts();
     loadLaborTypes();
   }, [search, selectedStatus, filters]);
+
+  // Verificar se há parâmetro approve na URL
+  useEffect(() => {
+    const approveId = searchParams.get('approve');
+    if (approveId && quotes.length > 0) {
+      const quote = quotes.find((q) => q.id === parseInt(approveId));
+      if (quote && quote.status === 'open') {
+        setApproveQuote(quote);
+        setShowApproveModal(true);
+        // Limpar parâmetro da URL
+        setSearchParams({});
+      }
+    }
+  }, [searchParams, quotes]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -352,7 +373,9 @@ const Quotes = () => {
       setDeleteConfirm({ isOpen: false, quote: null });
       loadQuotes();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Erro ao excluir orçamento');
+      const errorMessage = error.response?.data?.error || 'Erro ao excluir orçamento';
+      toast.error(errorMessage);
+      console.error('Erro ao excluir orçamento:', error);
       setDeleteConfirm({ isOpen: false, quote: null });
     }
   };
@@ -373,6 +396,21 @@ const Quotes = () => {
       toast.error(error.response?.data?.error || 'Erro ao converter orçamento');
       setConvertConfirm({ isOpen: false, quote: null });
     }
+  };
+
+  const handleApproveClick = (quote: Quote) => {
+    setApproveQuote(quote);
+    setShowApproveModal(true);
+  };
+
+  const handleApproveSuccess = () => {
+    loadQuotes();
+    setShowApproveModal(false);
+    setApproveQuote(null);
+    // Forçar recarregamento da página de agendamentos se estiver aberta
+    toast.success('Agendamento criado! Verifique a página de Agendamentos.', {
+      duration: 5000,
+    });
   };
 
   const handleUpdateStatus = async (quoteId: number, status: 'open' | 'approved' | 'rejected') => {
@@ -433,19 +471,54 @@ const Quotes = () => {
         return false;
       };
 
-      // Cabeçalho
-      pdf.setFillColor(59, 130, 246); // Azul #3b82f6
-      pdf.rect(0, 0, pageWidth, 35, 'F');
-      
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(24);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('ORÇAMENTO', pageWidth / 2, 15, { align: 'center' });
-      
-      pdf.setFontSize(18);
-      pdf.text(quote.quote_number, pageWidth / 2, 25, { align: 'center' });
+      // Buscar informações da oficina
+      let workshop: any = null;
+      try {
+        const response = await api.get('/workshop-info');
+        workshop = response.data;
+      } catch (error) {
+        console.error('Erro ao carregar informações da oficina:', error);
+      }
 
-      yPosition = 45;
+      // Cabeçalho com informações da oficina
+      const headerHeight = workshop?.logo_base64 ? 50 : 40;
+      pdf.setFillColor(59, 130, 246); // Azul #3b82f6
+      pdf.rect(0, 0, pageWidth, headerHeight, 'F');
+      
+      // Logo da oficina (se houver)
+      if (workshop?.logo_base64) {
+        try {
+          pdf.addImage(workshop.logo_base64, 'PNG', margin, 5, 30, 30);
+        } catch (error) {
+          console.error('Erro ao adicionar logo:', error);
+        }
+      }
+
+      // Informações da oficina no cabeçalho
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(workshop?.name ? 16 : 24);
+      pdf.setFont('helvetica', 'bold');
+      const workshopName = workshop?.name || 'ORÇAMENTO';
+      pdf.text(workshopName, workshop?.logo_base64 ? margin + 35 : pageWidth / 2, workshop?.logo_base64 ? 15 : 15, { 
+        align: workshop?.logo_base64 ? 'left' : 'center',
+        maxWidth: workshop?.logo_base64 ? pageWidth - margin - 60 : pageWidth - 2 * margin
+      });
+      
+      if (workshop?.trade_name) {
+        pdf.setFontSize(12);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(workshop.trade_name, workshop?.logo_base64 ? margin + 35 : pageWidth / 2, 22, {
+          align: workshop?.logo_base64 ? 'left' : 'center',
+          maxWidth: workshop?.logo_base64 ? pageWidth - margin - 60 : pageWidth - 2 * margin
+        });
+      }
+
+      // Número do Orçamento
+      pdf.setFontSize(18);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(quote.quote_number, pageWidth / 2, workshop?.logo_base64 ? 35 : 28, { align: 'center' });
+
+      yPosition = headerHeight + 10;
 
       // Dados do Orçamento
       pdf.setTextColor(30, 41, 59);
@@ -606,18 +679,34 @@ const Quotes = () => {
         yPosition += 5;
       }
 
-      // Rodapé
+      // Rodapé com informações da oficina
       const totalPages = pdf.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         pdf.setPage(i);
         pdf.setFontSize(8);
         pdf.setTextColor(100, 116, 139);
+        
+        // Texto do rodapé personalizado ou padrão
+        const footerText = workshop?.footer_text || `Página ${i} de ${totalPages} - Gerado em ${new Date().toLocaleString('pt-BR')}`;
         pdf.text(
-          `Página ${i} de ${totalPages} - Gerado em ${new Date().toLocaleString('pt-BR')}`,
+          footerText,
           pageWidth / 2,
           pageHeight - 10,
-          { align: 'center' }
+          { align: 'center', maxWidth: pageWidth - 2 * margin }
         );
+        
+        // Informações de contato da oficina (se houver)
+        if (workshop && (workshop.phone || workshop.email || workshop.address_city)) {
+          let contactInfo = '';
+          if (workshop.phone) contactInfo += `Tel: ${workshop.phone}`;
+          if (workshop.email) contactInfo += (contactInfo ? ' | ' : '') + `Email: ${workshop.email}`;
+          if (workshop.address_city) contactInfo += (contactInfo ? ' | ' : '') + `${workshop.address_city}${workshop.address_state ? '/' + workshop.address_state : ''}`;
+          
+          if (contactInfo) {
+            pdf.setFontSize(7);
+            pdf.text(contactInfo, pageWidth / 2, pageHeight - 5, { align: 'center', maxWidth: pageWidth - 2 * margin });
+          }
+        }
       }
 
       // Salvar PDF
@@ -941,22 +1030,42 @@ const Quotes = () => {
                             <Edit size={16} color="#64748b" />
                           </button>
                           {quote.status === 'open' && (
-                            <button
-                              onClick={() => handleConvertClick(quote)}
-                              style={{
-                                padding: '0.5rem',
-                                backgroundColor: '#10b98120',
-                                border: 'none',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
-                              title="Converter em OS"
-                            >
-                              <ArrowRight size={16} color="#10b981" />
-                            </button>
+                            <>
+                              {(user?.profile === 'admin' || user?.profile === 'attendant') && (
+                                <button
+                                  onClick={() => handleApproveClick(quote)}
+                                  style={{
+                                    padding: '0.5rem',
+                                    backgroundColor: '#fff7ed',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}
+                                  title="Aprovar e Agendar"
+                                >
+                                  <CheckCircle size={16} color="#f97316" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleConvertClick(quote)}
+                                style={{
+                                  padding: '0.5rem',
+                                  backgroundColor: '#10b98120',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                                title="Converter em OS"
+                              >
+                                <ArrowRight size={16} color="#10b981" />
+                              </button>
+                            </>
                           )}
                           <button
                             onClick={() => handleDeleteClick(quote)}
@@ -1000,7 +1109,11 @@ const Quotes = () => {
       <ConfirmDialog
         isOpen={deleteConfirm.isOpen}
         title="Confirmar Exclusão"
-        message={`Tem certeza que deseja excluir o orçamento "${deleteConfirm.quote?.quote_number}"? Esta ação não pode ser desfeita.`}
+        message={
+          deleteConfirm.quote?.status === 'converted'
+            ? `Atenção: O orçamento "${deleteConfirm.quote?.quote_number}" já foi convertido em ordem de serviço. Tem certeza que deseja excluí-lo? Esta ação não pode ser desfeita e não afetará a ordem de serviço já criada.`
+            : `Tem certeza que deseja excluir o orçamento "${deleteConfirm.quote?.quote_number}"? Esta ação não pode ser desfeita.`
+        }
         confirmText="Excluir"
         cancelText="Cancelar"
         type="danger"
@@ -1818,6 +1931,24 @@ const Quotes = () => {
             })()}
           </div>
         </div>
+      )}
+
+      {/* Modal de Aprovação */}
+      {showApproveModal && approveQuote && (
+        <ApproveQuoteModal
+          quoteId={approveQuote.id}
+          quoteNumber={approveQuote.quote_number}
+          clientName={approveQuote.client_name}
+          vehicleBrand={approveQuote.vehicle_brand}
+          vehicleModel={approveQuote.vehicle_model}
+          vehiclePlate={approveQuote.vehicle_plate}
+          total={approveQuote.total}
+          onClose={() => {
+            setShowApproveModal(false);
+            setApproveQuote(null);
+          }}
+          onSuccess={handleApproveSuccess}
+        />
       )}
     </div>
   );

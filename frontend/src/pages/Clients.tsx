@@ -2,10 +2,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { Plus, Search, Edit, Trash2, User, Building2, Phone, Mail, Eye, Car, MapPin, Loader2, FileText, DollarSign, Shield, TrendingUp, Calendar } from 'lucide-react';
 import api from '../services/api';
 import { showSuccessToast, showErrorToast } from '../components/common/ToastEnhancer';
-import SkeletonLoader from '../components/common/SkeletonLoader';
 import AdvancedFilters from '../components/common/AdvancedFilters';
 import Pagination from '../components/common/Pagination';
 import ConfirmDialog from '../components/common/ConfirmDialog';
+import { ResponsiveTable } from '../components/common/ResponsiveTable';
+import { ResponsiveModal } from '../components/common/ResponsiveModal';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { formatCPF, formatCNPJ, formatPhone, formatCEP, validateCPF, validateCNPJ, removeNonNumeric, fetchAddressByCEP } from '../utils/formatters';
 
@@ -479,210 +480,171 @@ const Clients = () => {
       </div>
 
       {/* Table */}
-      <div
-        style={{
-          backgroundColor: 'white',
-          borderRadius: '12px',
-          boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-          overflow: 'hidden',
-        }}
-      >
-        {loading ? (
-          <SkeletonLoader type="table" />
-        ) : filteredClients.length === 0 ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
-            Nenhum cliente encontrado
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
-                  Cliente
-                </th>
-                <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
-                  Documento
-                </th>
-                <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
-                  Contato
-                </th>
-                <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
-                  Localização
-                </th>
-                <th style={{ padding: '1rem', textAlign: 'center', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedClients.map((client) => (
-                <tr
-                  key={client.id}
+      <ResponsiveTable
+        columns={[
+          {
+            key: 'client',
+            label: 'Cliente',
+            render: (client: Client) => (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div
                   style={{
-                    borderBottom: '1px solid #e2e8f0',
-                    transition: 'background-color 0.2s',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#f8fafc';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'white';
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    backgroundColor: client.type === 'PF' ? '#f97316' : '#3b82f6',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
                   }}
                 >
-                  <td style={{ padding: '1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <div
-                        style={{
-                          width: '40px',
-                          height: '40px',
-                          borderRadius: '50%',
-                          backgroundColor: client.type === 'PF' ? '#f97316' : '#3b82f6',
-                          color: 'white',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        {client.type === 'PF' ? <User size={20} /> : <Building2 size={20} />}
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: '600', color: '#1e293b' }}>{client.name}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                          {client.type === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica'}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ padding: '1rem', color: '#64748b' }}>
-                    {formatDocument(client.type, client.cpf, client.cnpj)}
-                  </td>
-                  <td style={{ padding: '1rem' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                      {client.phone && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-                          <Phone size={14} color="#64748b" />
-                          <span style={{ color: '#64748b' }}>{client.phone}</span>
-                        </div>
-                      )}
-                      {client.email && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-                          <Mail size={14} color="#64748b" />
-                          <span style={{ color: '#64748b' }}>{client.email}</span>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td style={{ padding: '1rem', color: '#64748b', fontSize: '0.875rem' }}>
-                    {client.address_city && client.address_state
-                      ? `${client.address_city}/${client.address_state}`
-                      : '-'}
-                  </td>
-                  <td style={{ padding: '1rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
-                      <button
-                        onClick={() => handleViewClient(client)}
-                        style={{
-                          padding: '0.5rem',
-                          backgroundColor: '#eff6ff',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                        title="Ver detalhes"
-                      >
-                        <Eye size={16} color="#3b82f6" />
-                      </button>
-                      <button
-                        onClick={() => handleEdit(client)}
-                        style={{
-                          padding: '0.5rem',
-                          backgroundColor: '#f1f5f9',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                        title="Editar"
-                      >
-                        <Edit size={16} color="#64748b" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteClick(client)}
-                        style={{
-                          padding: '0.5rem',
-                          backgroundColor: '#fee2e2',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                        title="Excluir"
-                      >
-                        <Trash2 size={16} color="#ef4444" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+                  {client.type === 'PF' ? <User size={20} /> : <Building2 size={20} />}
+                </div>
+                <div>
+                  <div style={{ fontWeight: '600', color: '#1e293b' }}>{client.name}</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    {client.type === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica'}
+                  </div>
+                </div>
+              </div>
+            ),
+          },
+          {
+            key: 'document',
+            label: 'Documento',
+            render: (client: Client) => formatDocument(client.type, client.cpf, client.cnpj),
+          },
+          {
+            key: 'contact',
+            label: 'Contato',
+            render: (client: Client) => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                {client.phone && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
+                    <Phone size={14} color="#64748b" />
+                    <span style={{ color: '#64748b' }}>{client.phone}</span>
+                  </div>
+                )}
+                {client.email && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
+                    <Mail size={14} color="#64748b" />
+                    <span style={{ color: '#64748b' }}>{client.email}</span>
+                  </div>
+                )}
+              </div>
+            ),
+          },
+          {
+            key: 'location',
+            label: 'Localização',
+            render: (client: Client) =>
+              client.address_city && client.address_state
+                ? `${client.address_city}/${client.address_state}`
+                : '-',
+          },
+          {
+            key: 'actions',
+            label: 'Ações',
+            align: 'center',
+            render: (client: Client) => (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleViewClient(client);
+                  }}
+                  style={{
+                    padding: '0.5rem',
+                    backgroundColor: '#eff6ff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: '36px',
+                    minHeight: '36px',
+                  }}
+                  title="Ver detalhes"
+                >
+                  <Eye size={16} color="#3b82f6" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEdit(client);
+                  }}
+                  style={{
+                    padding: '0.5rem',
+                    backgroundColor: '#f1f5f9',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: '36px',
+                    minHeight: '36px',
+                  }}
+                  title="Editar"
+                >
+                  <Edit size={16} color="#64748b" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteClick(client);
+                  }}
+                  style={{
+                    padding: '0.5rem',
+                    backgroundColor: '#fee2e2',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: '36px',
+                    minHeight: '36px',
+                  }}
+                  title="Excluir"
+                >
+                  <Trash2 size={16} color="#ef4444" />
+                </button>
+              </div>
+            ),
+          },
+        ]}
+        data={paginatedClients}
+        loading={loading}
+        emptyMessage="Nenhum cliente encontrado"
+        keyExtractor={(client) => client.id}
+      />
 
-        {/* Pagination */}
-        {!loading && filteredClients.length > 0 && (
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-            totalItems={filteredClients.length}
-            itemsPerPage={itemsPerPage}
-          />
-        )}
-      </div>
+      {/* Pagination */}
+      {!loading && filteredClients.length > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          totalItems={filteredClients.length}
+          itemsPerPage={itemsPerPage}
+        />
+      )}
 
       {/* Modal */}
-      {showModal && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-          onClick={() => {
-            setShowModal(false);
-            resetForm();
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: 'white',
-              borderRadius: '12px',
-              padding: '2rem',
-              width: '90%',
-              maxWidth: '600px',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: 'bold' }}>
-              {editingClient ? 'Editar Cliente' : 'Novo Cliente'}
-            </h2>
-            <form onSubmit={handleSubmit}>
+      <ResponsiveModal
+        isOpen={showModal}
+        onClose={() => {
+          setShowModal(false);
+          resetForm();
+        }}
+        title={editingClient ? 'Editar Cliente' : 'Novo Cliente'}
+        size="lg"
+      >
+        <form onSubmit={handleSubmit}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
@@ -1095,9 +1057,7 @@ const Clients = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </ResponsiveModal>
 
       {/* View Client Modal */}
       {viewClient && (

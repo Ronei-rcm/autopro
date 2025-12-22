@@ -77,12 +77,14 @@ Fornecer uma solução completa e integrada para gerenciar todas as operações 
 - Número automático (OS-YYYY-XXXXX)
 - Itens (produtos e mão de obra)
 - Cálculo automático de totais
+- **Gestão inteligente de desconto** (zeramento automático, validações)
 - Controle de status (Aberta, Em Andamento, Aguardando Peças, Finalizada, Cancelada)
 - Integração com estoque (saída automática)
 - Histórico de alterações
 - Ações rápidas (iniciar, finalizar, cancelar)
 - Modal de visualização detalhada
 - Dashboard de estatísticas
+- **Exclusão com validação de contas a receber** (navegação inteligente)
 
 ### ✅ 8. Agenda
 - Agendamento de serviços
@@ -105,6 +107,8 @@ Fornecer uma solução completa e integrada para gerenciar todas as operações 
   - Controle de vencimento
   - Recebimentos parciais
   - Status automático
+  - **Filtro por ordem de serviço**
+  - **Destaque visual de contas vinculadas**
 - **Dashboard Financeiro**
   - Resumo de contas a pagar e receber
   - Saldo do mês
@@ -181,6 +185,8 @@ Fornecer uma solução completa e integrada para gerenciar todas as operações 
 
 ### Cálculos Automáticos
 - Totais de OS (subtotal, desconto, total)
+- **Zeramento automático de desconto quando não há itens**
+- **Validações robustas de desconto (frontend e backend)**
 - Status de contas (pago quando valor pago >= valor total)
 - Alertas de estoque baixo
 - Comparações mensais

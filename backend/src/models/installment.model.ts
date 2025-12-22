@@ -16,7 +16,58 @@ export interface Installment {
 }
 
 export class InstallmentModel {
+  static async ensureTableExists(): Promise<void> {
+    try {
+      // Verificar se a tabela existe
+      const checkTable = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'installments'
+        );
+      `);
+
+      if (!checkTable.rows[0].exists) {
+        console.log('Tabela installments não existe. Criando automaticamente...');
+        
+        // Criar a tabela
+        await pool.query(`
+          CREATE TABLE installments (
+            id SERIAL PRIMARY KEY,
+            account_receivable_id INTEGER NOT NULL REFERENCES accounts_receivable(id) ON DELETE CASCADE,
+            installment_number INTEGER NOT NULL,
+            due_date DATE NOT NULL,
+            amount DECIMAL(10,2) NOT NULL,
+            paid_amount DECIMAL(10,2) DEFAULT 0,
+            paid_at TIMESTAMP,
+            payment_method VARCHAR(50) CHECK (payment_method IN ('cash', 'credit_card', 'debit_card', 'pix', 'bank_transfer')),
+            status VARCHAR(20) DEFAULT 'open' CHECK (status IN ('open', 'paid', 'overdue', 'cancelled')),
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT unique_installment_number UNIQUE (account_receivable_id, installment_number)
+          );
+        `);
+
+        // Criar índices
+        await pool.query(`
+          CREATE INDEX IF NOT EXISTS idx_installments_account_receivable_id ON installments(account_receivable_id);
+          CREATE INDEX IF NOT EXISTS idx_installments_due_date ON installments(due_date);
+          CREATE INDEX IF NOT EXISTS idx_installments_status ON installments(status);
+        `);
+
+        console.log('✅ Tabela installments criada automaticamente!');
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar tabela installments:', error);
+      throw error;
+    }
+  }
+
   static async findByReceivableId(accountReceivableId: number): Promise<Installment[]> {
+    // Garantir que a tabela existe antes de buscar
+    await this.ensureTableExists();
+    
     const result = await pool.query(
       `SELECT * FROM installments 
        WHERE account_receivable_id = $1 
@@ -27,6 +78,9 @@ export class InstallmentModel {
   }
 
   static async findById(id: number): Promise<Installment | null> {
+    // Garantir que a tabela existe antes de buscar
+    await this.ensureTableExists();
+    
     const result = await pool.query(
       'SELECT * FROM installments WHERE id = $1',
       [id]
@@ -35,6 +89,9 @@ export class InstallmentModel {
   }
 
   static async create(data: Omit<Installment, 'id' | 'created_at' | 'updated_at'>): Promise<Installment> {
+    // Garantir que a tabela existe antes de criar
+    await this.ensureTableExists();
+    
     const result = await pool.query(
       `INSERT INTO installments (
         account_receivable_id, installment_number, due_date, amount,

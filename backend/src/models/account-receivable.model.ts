@@ -7,7 +7,8 @@ export class AccountReceivableModel {
     status?: string,
     clientId?: number,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    orderId?: number
   ): Promise<any[]> {
     let query = `
       SELECT ar.id, ar.client_id, ar.order_id, ar.quote_id, ar.description, ar.due_date, ar.amount,
@@ -29,6 +30,12 @@ export class AccountReceivableModel {
     if (clientId) {
       query += ` AND ar.client_id = $${paramCount}`;
       params.push(clientId);
+      paramCount++;
+    }
+
+    if (orderId) {
+      query += ` AND ar.order_id = $${paramCount}`;
+      params.push(orderId);
       paramCount++;
     }
 

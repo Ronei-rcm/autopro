@@ -4,7 +4,9 @@
 
 Todos os módulos principais foram implementados e estão funcionais com dados reais do banco de dados.
 
-### 🔄 Última Atualização: 20/12/2024
+### 🔄 Última Atualização: Janeiro 2025
+
+**Versão Atual:** 1.2.0
 
 **Atualizações de Dependências:**
 - ✅ TypeScript atualizado para 5.9.3 (backend e frontend)
@@ -12,6 +14,12 @@ Todos os módulos principais foram implementados e estão funcionais com dados r
 - ✅ react-hook-form atualizado para 7.69.0
 - ✅ 0 vulnerabilidades de segurança encontradas
 - ✅ Correções de type safety aplicadas
+
+**Melhorias de Janeiro 2025:**
+- ✅ Gestão inteligente de desconto (zeramento automático, validações)
+- ✅ Melhoria na exclusão de ordens (navegação inteligente, filtros)
+- ✅ Validações robustas em múltiplas camadas
+- ✅ Experiência do usuário aprimorada
 
 ---
 
@@ -70,12 +78,14 @@ Todos os módulos principais foram implementados e estão funcionais com dados r
 - ✅ Número automático (OS-YYYY-XXXXX)
 - ✅ Itens (produtos e mão de obra)
 - ✅ Cálculo automático de totais
+- ✅ **Gestão inteligente de desconto** (zeramento automático, validações)
 - ✅ Controle de status
 - ✅ Integração com estoque
 - ✅ Histórico de alterações
 - ✅ Ações rápidas
 - ✅ Modal de visualização detalhada
 - ✅ Dashboard de estatísticas
+- ✅ **Exclusão com validação de contas a receber** (navegação inteligente)
 
 ### 8. Agenda
 - ✅ CRUD completo de agendamentos
@@ -94,6 +104,8 @@ Todos os módulos principais foram implementados e estão funcionais com dados r
 - ✅ Dashboard financeiro
 - ✅ Categorização
 - ✅ Métodos de pagamento
+- ✅ **Filtro de contas a receber por ordem de serviço**
+- ✅ **Destaque visual de contas vinculadas**
 
 ### 10. Relatórios
 - ✅ Visão Geral
@@ -156,6 +168,8 @@ Todos os módulos principais foram implementados e estão funcionais com dados r
 
 ### Cálculos Automáticos
 - ✅ Totais de OS
+- ✅ **Zeramento automático de desconto quando não há itens**
+- ✅ **Validações robustas de desconto (frontend e backend)**
 - ✅ Status de contas
 - ✅ Alertas de estoque
 - ✅ Comparações mensais

@@ -20,8 +20,15 @@ import userRoutes from './routes/user.routes';
 import warrantyRoutes from './routes/warranty.routes';
 import orderTemplateRoutes from './routes/order-template.routes';
 import checklistRoutes from './routes/checklist.routes';
+import workshopInfoRoutes from './routes/workshop-info.routes';
+import permissionRoutes from './routes/permission.routes';
+import moduleSettingsRoutes from './routes/module-settings.routes';
+import notificationRoutes from './routes/notification.routes';
 
 const app = express();
+
+// Trust proxy - necessário para rate limiting funcionar corretamente com proxies/reverse proxies
+app.set('trust proxy', 1);
 
 // Middlewares de segurança
 app.use(helmet({
@@ -88,6 +95,10 @@ app.use('/api/users', userRoutes);
 app.use('/api/warranties', warrantyRoutes);
 app.use('/api/order-templates', orderTemplateRoutes);
 app.use('/api/checklists', checklistRoutes);
+app.use('/api/workshop-info', workshopInfoRoutes);
+app.use('/api/permissions', permissionRoutes);
+app.use('/api/module-settings', moduleSettingsRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // 404 handler
 app.use((req, res) => {

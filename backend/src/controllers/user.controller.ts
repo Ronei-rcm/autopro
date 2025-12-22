@@ -3,6 +3,7 @@ import { UserModel } from '../models/user.model';
 import { hashPassword } from '../utils/password';
 import { body, validationResult } from 'express-validator';
 import { AuthRequest } from '../middleware/auth.middleware';
+import pool from '../config/database';
 
 export class UserController {
   // Listar todos os usuários (apenas admin)
@@ -13,6 +14,22 @@ export class UserController {
     } catch (error) {
       console.error('Get all users error:', error);
       res.status(500).json({ error: 'Erro ao buscar usuários' });
+    }
+  }
+
+  // Listar apenas mecânicos (para transferência de OS)
+  static async getMechanics(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const result = await pool.query(
+        `SELECT id, name, email, profile, active 
+         FROM users 
+         WHERE profile = 'mechanic' AND active = true 
+         ORDER BY name`
+      );
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Get mechanics error:', error);
+      res.status(500).json({ error: 'Erro ao buscar mecânicos' });
     }
   }
 

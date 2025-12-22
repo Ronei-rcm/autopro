@@ -14,7 +14,81 @@ export interface OrderFile {
 }
 
 export class OrderFileModel {
+  static async ensureTableExists(): Promise<void> {
+    try {
+      // Verificar se a tabela existe
+      const checkTable = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'order_files'
+        );
+      `);
+
+      if (!checkTable.rows[0].exists) {
+        console.log('Tabela order_files não existe. Criando automaticamente...');
+        
+        // Criar a tabela
+        await pool.query(`
+          CREATE TABLE order_files (
+            id SERIAL PRIMARY KEY,
+            order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+            file_name VARCHAR(255) NOT NULL,
+            file_path TEXT NOT NULL,
+            file_type VARCHAR(50) NOT NULL,
+            file_size INTEGER,
+            description TEXT,
+            uploaded_by INTEGER REFERENCES users(id),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+
+        // Criar índices
+        await pool.query(`
+          CREATE INDEX IF NOT EXISTS idx_order_files_order_id ON order_files(order_id);
+          CREATE INDEX IF NOT EXISTS idx_order_files_file_type ON order_files(file_type);
+        `);
+
+        console.log('✅ Tabela order_files criada automaticamente!');
+      } else {
+        // Verificar se o campo file_path precisa ser alterado para TEXT
+        try {
+          const columnCheck = await pool.query(`
+            SELECT data_type, character_maximum_length
+            FROM information_schema.columns
+            WHERE table_name = 'order_files' AND column_name = 'file_path'
+          `);
+          
+          if (columnCheck.rows.length > 0) {
+            const columnInfo = columnCheck.rows[0];
+            // Se for VARCHAR com limite, alterar para TEXT
+            if (columnInfo.data_type === 'character varying' && columnInfo.character_maximum_length) {
+              console.log('Alterando file_path de VARCHAR para TEXT...');
+              await pool.query(`ALTER TABLE order_files ALTER COLUMN file_path TYPE TEXT;`);
+              console.log('✅ Campo file_path alterado para TEXT!');
+            }
+          }
+        } catch (alterError: any) {
+          // Se falhar, tentar alterar diretamente (pode ser que precise de permissões)
+          try {
+            await pool.query(`ALTER TABLE order_files ALTER COLUMN file_path TYPE TEXT;`);
+            console.log('✅ Campo file_path alterado para TEXT (tentativa direta)!');
+          } catch (directAlterError: any) {
+            console.warn('Não foi possível alterar file_path para TEXT automaticamente:', directAlterError.message);
+            console.warn('Execute manualmente: ALTER TABLE order_files ALTER COLUMN file_path TYPE TEXT;');
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar tabela order_files:', error);
+      throw error;
+    }
+  }
+
   static async findByOrder(orderId: number): Promise<OrderFile[]> {
+    // Garantir que a tabela existe antes de buscar
+    await this.ensureTableExists();
+    
     const result = await pool.query(
       `SELECT of.*, u.name as uploaded_by_name
        FROM order_files of
@@ -27,6 +101,9 @@ export class OrderFileModel {
   }
 
   static async findById(id: number): Promise<OrderFile | null> {
+    // Garantir que a tabela existe antes de buscar
+    await this.ensureTableExists();
+    
     const result = await pool.query(
       'SELECT * FROM order_files WHERE id = $1',
       [id]
@@ -35,6 +112,9 @@ export class OrderFileModel {
   }
 
   static async create(data: Omit<OrderFile, 'id' | 'created_at'>): Promise<OrderFile> {
+    // Garantir que a tabela existe antes de criar
+    await this.ensureTableExists();
+    
     const result = await pool.query(
       `INSERT INTO order_files (order_id, file_name, file_path, file_type, file_size, description, uploaded_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7)

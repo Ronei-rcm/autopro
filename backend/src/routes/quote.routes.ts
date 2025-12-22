@@ -5,6 +5,7 @@ import {
   createQuoteValidation,
   updateQuoteValidation,
   addItemValidation,
+  approveAndScheduleValidation,
 } from '../controllers/quote.controller';
 
 const router = Router();
@@ -20,6 +21,9 @@ router.delete('/:id', QuoteController.delete);
 
 // Status
 router.patch('/:id/status', QuoteController.updateStatus);
+
+// Aprovar e agendar
+router.post('/:id/approve-and-schedule', approveAndScheduleValidation, QuoteController.approveAndSchedule);
 
 // Converter em OS
 router.post('/:id/convert-to-order', QuoteController.convertToOrder);

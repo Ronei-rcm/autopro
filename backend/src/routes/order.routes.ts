@@ -24,12 +24,17 @@ router.put('/:id/discount', OrderController.updateDiscount);
 router.get('/statistics/overview', OrderController.getStatistics);
 router.post('/:id/quick-action', OrderController.quickAction);
 router.post('/:id/generate-receivable', OrderController.generateReceivable);
+router.post('/:id/assume', OrderController.assumeOrder);
+router.post('/:id/transfer', OrderController.transferOrder);
 
 // Assinatura e arquivos
 router.post('/:id/signature', saveSignatureValidation, OrderController.saveSignature);
 router.post('/:id/files', OrderController.uploadFile);
 router.get('/:id/files/:fileId', OrderController.getFile);
 router.delete('/:id/files/:fileId', OrderController.deleteFile);
+
+// Garantias
+router.post('/:id/warranties', OrderController.createWarranties);
 
 export default router;
 

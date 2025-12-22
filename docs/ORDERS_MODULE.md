@@ -15,6 +15,8 @@ O módulo de Ordens de Serviço (OS) é um dos principais componentes do sistema
 - ✅ Definição de status (Aberta, Em Andamento, Aguardando Peças, Finalizada, Cancelada)
 - ✅ Campo de observações técnicas
 - ✅ Aplicação de descontos
+- ✅ **Assumir OS** - Mecânico pode assumir OS sem mecânico ou de outro mecânico
+- ✅ **Transferir OS** - Admin ou mecânico pode transferir OS para outro mecânico
 
 ### 2. Gestão de Itens
 
@@ -259,5 +261,5 @@ O módulo oferece estatísticas em tempo real:
 
 ---
 
-**Última atualização**: Dezembro 2024  
-**Versão**: 2.0.0 (com melhorias de cálculo automático e validações)
+**Última atualização**: Janeiro 2025  
+**Versão**: 2.1.0 (com sistema de notificações, assumir/transferir OS e transferência automática para financeiro)

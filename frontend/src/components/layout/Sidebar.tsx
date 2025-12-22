@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   LayoutDashboard, 
   Users, 
@@ -17,25 +17,39 @@ import {
   Shield,
   Layers,
   CheckSquare,
-  Receipt
+  Receipt,
+  Building2
 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useModuleSettings } from '../../hooks/useModuleSettings';
 
-const menuItems = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/clientes', label: 'Clientes', icon: Users },
-  { path: '/veiculos', label: 'Veículos', icon: Car },
-  { path: '/fornecedores', label: 'Fornecedores', icon: Truck },
-  { path: '/estoque', label: 'Estoque', icon: Package },
-  { path: '/orcamentos', label: 'Orçamentos', icon: Receipt },
-  { path: '/ordens-servico', label: 'Ordens de Serviço', icon: FileText },
-  { path: '/agenda', label: 'Agenda', icon: Calendar },
-  { path: '/financeiro', label: 'Financeiro', icon: DollarSign },
-  { path: '/garantias', label: 'Garantias', icon: Shield },
-  { path: '/templates-os', label: 'Templates de OS', icon: Layers },
+interface MenuItem {
+  path: string;
+  label: string;
+  icon: any;
+  module?: string;
+  action?: string;
+  requireAdmin?: boolean;
+}
+
+const allMenuItems: MenuItem[] = [
+  { path: '/', label: 'Dashboard', icon: LayoutDashboard, module: 'dashboard', action: 'view' },
+  { path: '/clientes', label: 'Clientes', icon: Users, module: 'clients', action: 'view' },
+  { path: '/veiculos', label: 'Veículos', icon: Car, module: 'vehicles', action: 'view' },
+  { path: '/fornecedores', label: 'Fornecedores', icon: Truck, module: 'suppliers', action: 'view' },
+  { path: '/estoque', label: 'Estoque', icon: Package, module: 'inventory', action: 'view' },
+  { path: '/orcamentos', label: 'Orçamentos', icon: Receipt, module: 'quotes', action: 'view' },
+  { path: '/ordens-servico', label: 'Ordens de Serviço', icon: FileText, module: 'orders', action: 'view' },
+  { path: '/agenda', label: 'Agenda', icon: Calendar, module: 'appointments', action: 'view' },
+  { path: '/financeiro', label: 'Financeiro', icon: DollarSign, module: 'financial', action: 'view' },
+  { path: '/garantias', label: 'Garantias', icon: Shield, module: 'warranties', action: 'view' },
+  { path: '/templates-os', label: 'Templates de OS', icon: Layers, module: 'templates', action: 'view' },
   { path: '/checklists', label: 'Checklists', icon: CheckSquare },
-  { path: '/relatorios', label: 'Relatórios', icon: BarChart3 },
-  { path: '/usuarios', label: 'Usuários', icon: UserPlus },
-  { path: '/configuracoes', label: 'Configurações', icon: Settings },
+  { path: '/relatorios', label: 'Relatórios', icon: BarChart3, module: 'reports', action: 'view' },
+  { path: '/usuarios', label: 'Usuários', icon: UserPlus, module: 'users', action: 'view', requireAdmin: true },
+  { path: '/permissoes', label: 'Permissões', icon: Shield, module: 'users', action: 'manage_permissions', requireAdmin: true },
+  { path: '/informacoes-oficina', label: 'Informações da Oficina', icon: Building2, module: 'workshop_info', action: 'view' },
+  { path: '/configuracoes', label: 'Configurações', icon: Settings, module: 'settings', action: 'view' },
 ];
 
 interface SidebarProps {
@@ -46,7 +60,7 @@ interface SidebarProps {
 }
 
 interface MenuItemProps {
-  item: { path: string; label: string; icon: any };
+  item: MenuItem;
   isCollapsed: boolean;
   onItemClick?: () => void;
 }
@@ -138,7 +152,7 @@ const MenuItem = ({ item, isCollapsed, onItemClick }: MenuItemProps) => {
 
 const Sidebar = ({ isCollapsed, isMobile = false, isMobileMenuOpen = false, onCloseMobileMenu }: SidebarProps) => {
   const sidebarWidth = isCollapsed ? 80 : 260;
-  const mobileWidth = 280;
+  const mobileWidth = Math.min(320, window.innerWidth * 0.85); // Max 85% da largura da tela
 
   // Mobile: drawer behavior
   if (isMobile) {
@@ -147,6 +161,7 @@ const Sidebar = ({ isCollapsed, isMobile = false, isMobileMenuOpen = false, onCl
         <aside
           style={{
             width: `${mobileWidth}px`,
+            maxWidth: '85vw',
             height: '100vh',
             backgroundColor: '#1e293b',
             color: 'white',
@@ -159,6 +174,7 @@ const Sidebar = ({ isCollapsed, isMobile = false, isMobileMenuOpen = false, onCl
             transition: 'left 0.3s ease-in-out',
             overflow: 'hidden',
             boxShadow: isMobileMenuOpen ? '2px 0 8px rgba(0, 0, 0, 0.15)' : 'none',
+            touchAction: 'pan-y', // Allow vertical scroll, prevent horizontal
           }}
           role="navigation"
           aria-label="Menu principal"
@@ -205,6 +221,37 @@ interface SidebarContentProps {
 }
 
 const SidebarContent = ({ isCollapsed, isMobile, onCloseMobileMenu }: SidebarContentProps) => {
+  const { user } = useAuth();
+  const { isModuleHidden } = useModuleSettings();
+  
+  // Filtrar itens do menu baseado em permissões e módulos ocultos
+  const menuItems = useMemo(() => {
+    return allMenuItems.filter(item => {
+      // Se requer admin e não é admin, ocultar
+      if (item.requireAdmin && user?.profile !== 'admin') {
+        return false;
+      }
+      
+      // Se não tem módulo/action definido, sempre mostrar (ex: Dashboard)
+      if (!item.module || !item.action) {
+        return true;
+      }
+      
+      // Admin vê tudo (incluindo módulos ocultos)
+      if (user?.profile === 'admin') {
+        return true;
+      }
+      
+      // Para outros perfis, ocultar se o módulo estiver marcado como oculto
+      if (isModuleHidden(item.module)) {
+        return false;
+      }
+      
+      // Caso contrário, mostrar (a verificação de permissão será feita no backend)
+      return true;
+    });
+  }, [user, isModuleHidden]);
+  
   return (
     <>
       {/* Logo */}
@@ -297,8 +344,8 @@ const SidebarContent = ({ isCollapsed, isMobile, onCloseMobileMenu }: SidebarCon
             overflow: 'hidden',
         }}
       >
-        <div>Versão 1.0.0</div>
-        <div style={{ marginTop: '0.25rem' }}>© 2024 AutoPro</div>
+        <div>Versão 1.2.0</div>
+        <div style={{ marginTop: '0.25rem' }}>© 2025 AutoPro</div>
       </div>
       )}
     </>

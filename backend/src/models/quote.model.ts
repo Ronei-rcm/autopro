@@ -129,13 +129,30 @@ export class QuoteModel {
 
   static async generateQuoteNumber(): Promise<string> {
     const year = new Date().getFullYear();
+    const pattern = `ORC-${year}-%`;
+    
+    // Buscar o maior número existente para o ano atual
     const result = await pool.query(
-      `SELECT COUNT(*) as count FROM quotes WHERE quote_number LIKE $1`,
-      [`ORC-${year}-%`]
+      `SELECT quote_number 
+       FROM quotes 
+       WHERE quote_number LIKE $1 
+       ORDER BY quote_number DESC 
+       LIMIT 1`,
+      [pattern]
     );
 
-    const count = parseInt(result.rows[0].count) + 1;
-    return `ORC-${year}-${String(count).padStart(5, '0')}`;
+    let nextNumber = 1;
+    
+    if (result.rows.length > 0) {
+      // Extrair o número do último quote_number (ex: "ORC-2025-00002" -> 2)
+      const lastNumber = result.rows[0].quote_number;
+      const match = lastNumber.match(/ORC-\d{4}-(\d+)/);
+      if (match) {
+        nextNumber = parseInt(match[1]) + 1;
+      }
+    }
+    
+    return `ORC-${year}-${String(nextNumber).padStart(5, '0')}`;
   }
 
   static async create(

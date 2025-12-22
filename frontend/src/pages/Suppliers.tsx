@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Truck, Phone, Mail } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Truck, Phone, Mail, Shield } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { usePermission } from '../hooks/usePermission';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Supplier {
   id: number;
@@ -16,6 +18,8 @@ interface Supplier {
 }
 
 const Suppliers = () => {
+  const { hasPermission, loading: permissionLoading } = usePermission('suppliers', 'view');
+  const { user } = useAuth();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -39,8 +43,15 @@ const Suppliers = () => {
   });
 
   useEffect(() => {
-    loadSuppliers();
-  }, [search]);
+    // Admin sempre tem acesso, outros perfis precisam de permissão
+    if (!permissionLoading) {
+      if (user?.profile === 'admin' || hasPermission) {
+        loadSuppliers();
+      } else {
+        setLoading(false);
+      }
+    }
+  }, [search, hasPermission, permissionLoading, user]);
 
   const loadSuppliers = async () => {
     try {
@@ -131,6 +142,64 @@ const Suppliers = () => {
     if (!cnpj) return '-';
     return cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
   };
+
+  // Se está carregando permissões, mostrar loading
+  if (permissionLoading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        minHeight: '60vh' 
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ 
+            border: '4px solid #f3f4f6', 
+            borderTop: '4px solid #f97316', 
+            borderRadius: '50%', 
+            width: '48px', 
+            height: '48px', 
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 1rem'
+          }} />
+          <p style={{ color: '#64748b' }}>Verificando permissões...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Se não tem permissão e não é admin, mostrar acesso negado
+  if (user?.profile !== 'admin' && !hasPermission) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        minHeight: '60vh',
+        flexDirection: 'column',
+        gap: '1rem',
+        padding: '2rem'
+      }}>
+        <div style={{ 
+          backgroundColor: '#fef2f2', 
+          border: '1px solid #fecaca', 
+          borderRadius: '8px', 
+          padding: '2rem',
+          maxWidth: '500px',
+          textAlign: 'center'
+        }}>
+          <Shield size={48} color="#dc2626" style={{ margin: '0 auto 1rem' }} />
+          <h2 style={{ color: '#dc2626', marginBottom: '0.5rem', fontSize: '1.5rem' }}>Acesso Negado</h2>
+          <p style={{ color: '#991b1b', marginBottom: '1rem', fontSize: '1rem' }}>
+            Você não tem permissão para acessar Fornecedores.
+          </p>
+          <p style={{ color: '#64748b', fontSize: '0.875rem' }}>
+            Entre em contato com o administrador para solicitar acesso.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

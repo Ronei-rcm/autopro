@@ -78,6 +78,7 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'details' | 'items' | 'history' | 'checklists' | 'signature' | 'files'>('details');
   const [showReceivableModal, setShowReceivableModal] = useState(false);
+  const [workshopInfo, setWorkshopInfo] = useState<any>(null);
   const [receivableForm, setReceivableForm] = useState({
     use_installments: false,
     installment_count: 2,
@@ -98,8 +99,18 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
     if (orderId) {
       loadOrder();
       loadChecklistExecutions();
+      loadWorkshopInfo();
     }
   }, [orderId]);
+
+  const loadWorkshopInfo = async () => {
+    try {
+      const response = await api.get('/workshop-info');
+      setWorkshopInfo(response.data);
+    } catch (error) {
+      console.error('Erro ao carregar informações da oficina:', error);
+    }
+  };
 
   useEffect(() => {
     if (activeTab === 'checklists' && orderId) {
@@ -229,35 +240,57 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
       return;
     }
 
+    // Validar tamanho do arquivo (máximo 5MB)
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (fileUploadForm.file.size > maxSize) {
+      toast.error('Arquivo muito grande. Tamanho máximo: 5MB');
+      return;
+    }
+
     try {
+      toast.loading('Enviando arquivo...', { id: 'upload-file' });
+      
       // Converter arquivo para base64
       const reader = new FileReader();
       reader.onload = async () => {
-        const base64 = reader.result as string;
-        const base64Data = base64.split(',')[1]; // Remove o prefixo data:image/...;base64,
-
         try {
+          const base64 = reader.result as string;
+          const base64Data = base64.split(',')[1]; // Remove o prefixo data:image/...;base64,
+
           await api.post(`/orders/${orderId}/files`, {
             file_data: base64Data,
             file_name: fileUploadForm.file!.name,
             file_type: fileUploadForm.file_type,
             description: fileUploadForm.description || null,
           });
-          toast.success('Arquivo enviado com sucesso!');
+          
+          toast.success('Arquivo enviado com sucesso!', { id: 'upload-file' });
           setShowFileUploadModal(false);
           setFileUploadForm({ file: null, file_type: 'photo', description: '' });
           loadOrder();
           onUpdate();
         } catch (error: any) {
-          toast.error(error.response?.data?.error || 'Erro ao enviar arquivo');
+          const errorMessage = error.response?.data?.error || 'Erro ao enviar arquivo';
+          
+          if (errorMessage.includes('não existe')) {
+            toast.error('Tabela order_files não encontrada. Execute a migration 007_add_order_signatures_and_files.sql', { 
+              id: 'upload-file',
+              duration: 8000
+            });
+          } else {
+            toast.error(errorMessage, { id: 'upload-file' });
+          }
+          
+          console.error('Erro ao enviar arquivo:', error.response?.data || error);
         }
       };
       reader.onerror = () => {
-        toast.error('Erro ao ler arquivo');
+        toast.error('Erro ao ler arquivo', { id: 'upload-file' });
       };
       reader.readAsDataURL(fileUploadForm.file);
     } catch (error: any) {
-      toast.error('Erro ao processar arquivo');
+      toast.error('Erro ao processar arquivo', { id: 'upload-file' });
+      console.error('Erro ao processar arquivo:', error);
     }
   };
 
@@ -281,15 +314,18 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
       const data: any = {};
       if (receivableForm.use_installments) {
         data.use_installments = true;
-        data.installment_count = receivableForm.installment_count;
+        data.installment_count = parseInt(receivableForm.installment_count.toString());
         data.first_due_date = receivableForm.first_due_date || new Date().toISOString().split('T')[0];
       }
       if (receivableForm.payment_method) {
         data.payment_method = receivableForm.payment_method;
       }
 
+      toast.loading('Gerando conta a receber...', { id: 'generate-receivable' });
+      
       await api.post(`/orders/${orderId}/generate-receivable`, data);
-      toast.success('Conta a receber gerada com sucesso!');
+      
+      toast.success('Conta a receber gerada com sucesso!', { id: 'generate-receivable' });
       setShowReceivableModal(false);
       setReceivableForm({
         use_installments: false,
@@ -297,9 +333,21 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
         first_due_date: '',
         payment_method: '',
       });
+      loadOrder();
       onUpdate();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Erro ao gerar conta a receber');
+      const errorMessage = error.response?.data?.error || 'Erro ao gerar conta a receber';
+      
+      if (errorMessage.includes('não existe')) {
+        toast.error('Tabela necessária não encontrada. Execute as migrations do banco de dados.', { 
+          id: 'generate-receivable',
+          duration: 8000
+        });
+      } else {
+        toast.error(errorMessage, { id: 'generate-receivable' });
+      }
+      
+      console.error('Erro ao gerar conta a receber:', error.response?.data || error);
     }
   };
 
@@ -310,7 +358,10 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
       toast.loading('Gerando PDF da OS...', { id: 'export-os-pdf' });
 
       // Import dinâmico
-      const { default: jsPDF } = await import('jspdf');
+      const [{ default: jsPDF }, QRCode] = await Promise.all([
+        import('jspdf'),
+        import('qrcode'),
+      ]);
 
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pageWidth = 210;
@@ -328,19 +379,76 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
         return false;
       };
 
-      // Cabeçalho
-      pdf.setFillColor(249, 115, 22); // Laranja #f97316
-      pdf.rect(0, 0, pageWidth, 35, 'F');
-      
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(24);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('ORDEM DE SERVIÇO', pageWidth / 2, 15, { align: 'center' });
-      
-      pdf.setFontSize(18);
-      pdf.text(order.order_number, pageWidth / 2, 25, { align: 'center' });
+      // Gerar QR Code com informações da OS
+      const qrData = JSON.stringify({
+        order_number: order.order_number,
+        order_id: order.id,
+        client: order.client_name,
+        total: order.total,
+        date: new Date().toISOString(),
+      });
+      const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
+        width: 200,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF',
+        },
+      });
 
-      yPosition = 45;
+      // Buscar informações da oficina se não estiverem carregadas
+      let workshop = workshopInfo;
+      if (!workshop) {
+        try {
+          const response = await api.get('/workshop-info');
+          workshop = response.data;
+        } catch (error) {
+          console.error('Erro ao carregar informações da oficina:', error);
+        }
+      }
+
+      // Cabeçalho com informações da oficina
+      const headerHeight = workshop?.logo_base64 ? 50 : 40;
+      pdf.setFillColor(249, 115, 22); // Laranja #f97316
+      pdf.rect(0, 0, pageWidth, headerHeight, 'F');
+      
+      // Logo da oficina (se houver)
+      if (workshop?.logo_base64) {
+        try {
+          pdf.addImage(workshop.logo_base64, 'PNG', margin, 5, 30, 30);
+        } catch (error) {
+          console.error('Erro ao adicionar logo:', error);
+        }
+      }
+
+      // Informações da oficina no cabeçalho
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(workshop?.name ? 16 : 24);
+      pdf.setFont('helvetica', 'bold');
+      const workshopName = workshop?.name || 'ORDEM DE SERVIÇO';
+      pdf.text(workshopName, workshop?.logo_base64 ? margin + 35 : pageWidth / 2, workshop?.logo_base64 ? 15 : 18, { 
+        align: workshop?.logo_base64 ? 'left' : 'center',
+        maxWidth: workshop?.logo_base64 ? pageWidth - margin - 60 : pageWidth - 2 * margin
+      });
+      
+      if (workshop?.trade_name) {
+        pdf.setFontSize(12);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(workshop.trade_name, workshop?.logo_base64 ? margin + 35 : pageWidth / 2, 22, {
+          align: workshop?.logo_base64 ? 'left' : 'center',
+          maxWidth: workshop?.logo_base64 ? pageWidth - margin - 60 : pageWidth - 2 * margin
+        });
+      }
+
+      // Número da OS
+      pdf.setFontSize(18);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(order.order_number, pageWidth / 2, workshop?.logo_base64 ? 35 : 28, { align: 'center' });
+
+      // Adicionar QR Code no canto superior direito do cabeçalho
+      pdf.addImage(qrCodeDataUrl, 'PNG', pageWidth - margin - 25, 5, 25, 25);
+
+      yPosition = headerHeight + 10;
 
       // Dados da OS
       pdf.setTextColor(30, 41, 59);
@@ -506,18 +614,56 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
         yPosition += 5;
       }
 
-      // Rodapé
+      // Adicionar QR Code e informações de rastreamento no final (se houver espaço)
+      checkNewPage(30);
+      if (yPosition < pageHeight - 40) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9);
+        pdf.setTextColor(30, 41, 59);
+        pdf.text('Rastreamento', margin, yPosition);
+        yPosition += 8;
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.setTextColor(100, 116, 139);
+        pdf.text('Escaneie o QR Code para acessar informações desta OS', margin, yPosition);
+        yPosition += 6;
+        pdf.text(`Número da OS: ${order.order_number}`, margin, yPosition);
+        yPosition += 5;
+
+        // QR Code menor no rodapé
+        pdf.addImage(qrCodeDataUrl, 'PNG', margin, yPosition, 20, 20);
+        yPosition += 25;
+      }
+
+      // Rodapé com informações da oficina
       const totalPages = pdf.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         pdf.setPage(i);
         pdf.setFontSize(8);
         pdf.setTextColor(100, 116, 139);
+        
+        // Texto do rodapé personalizado ou padrão
+        const footerText = workshop?.footer_text || `Página ${i} de ${totalPages} - Gerado em ${new Date().toLocaleString('pt-BR')}`;
         pdf.text(
-          `Página ${i} de ${totalPages} - Gerado em ${new Date().toLocaleString('pt-BR')}`,
+          footerText,
           pageWidth / 2,
           pageHeight - 10,
-          { align: 'center' }
+          { align: 'center', maxWidth: pageWidth - 2 * margin }
         );
+        
+        // Informações de contato da oficina (se houver)
+        if (workshop && (workshop.phone || workshop.email || workshop.address_city)) {
+          let contactInfo = '';
+          if (workshop.phone) contactInfo += `Tel: ${workshop.phone}`;
+          if (workshop.email) contactInfo += (contactInfo ? ' | ' : '') + `Email: ${workshop.email}`;
+          if (workshop.address_city) contactInfo += (contactInfo ? ' | ' : '') + `${workshop.address_city}${workshop.address_state ? '/' + workshop.address_state : ''}`;
+          
+          if (contactInfo) {
+            pdf.setFontSize(7);
+            pdf.text(contactInfo, pageWidth / 2, pageHeight - 5, { align: 'center', maxWidth: pageWidth - 2 * margin });
+          }
+        }
       }
 
       // Salvar PDF
@@ -1276,13 +1422,98 @@ const OrderDetailModal = ({ orderId, onClose, onUpdate }: OrderDetailModalProps)
                             cursor: 'pointer',
                           }}
                           onClick={() => {
-                            const img = new Image();
-                            img.src = `data:image/jpeg;base64,${file.file_path}`;
-                            const w = window.open('');
-                            if (w) {
-                              w.document.write(`<img src="${img.src}" style="max-width:100%">`);
-                            }
+                            // Criar modal seguro para visualizar imagem em tamanho maior
+                            // Usando React state ao invés de DOM manipulation para evitar avisos de segurança
+                            const imageUrl = `data:image/jpeg;base64,${file.file_path}`;
+                            
+                            // Criar elemento modal
+                            const modal = document.createElement('div');
+                            modal.setAttribute('role', 'dialog');
+                            modal.setAttribute('aria-modal', 'true');
+                            modal.setAttribute('aria-label', 'Visualizar imagem');
+                            
+                            // Aplicar estilos via objeto para evitar problemas de segurança
+                            Object.assign(modal.style, {
+                              position: 'fixed',
+                              top: '0',
+                              left: '0',
+                              right: '0',
+                              bottom: '0',
+                              backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              zIndex: '10000',
+                              cursor: 'pointer',
+                            });
+                            
+                            const img = document.createElement('img');
+                            img.src = imageUrl;
+                            img.alt = file.description || file.file_name;
+                            Object.assign(img.style, {
+                              maxWidth: '90%',
+                              maxHeight: '90%',
+                              objectFit: 'contain',
+                              borderRadius: '8px',
+                              cursor: 'default',
+                            });
+                            
+                            const closeBtn = document.createElement('button');
+                            closeBtn.innerHTML = '✕';
+                            closeBtn.setAttribute('aria-label', 'Fechar');
+                            Object.assign(closeBtn.style, {
+                              position: 'absolute',
+                              top: '20px',
+                              right: '20px',
+                              backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: '40px',
+                              height: '40px',
+                              fontSize: '24px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 'bold',
+                              color: '#1e293b',
+                              zIndex: '10001',
+                            });
+                            
+                            const closeModal = () => {
+                              if (document.body.contains(modal)) {
+                                document.body.removeChild(modal);
+                              }
+                              document.removeEventListener('keydown', handleEsc);
+                            };
+                            
+                            closeBtn.onclick = (e) => {
+                              e.stopPropagation();
+                              closeModal();
+                            };
+                            
+                            modal.onclick = (e) => {
+                              if (e.target === modal) {
+                                closeModal();
+                              }
+                            };
+                            
+                            const handleEsc = (e: KeyboardEvent) => {
+                              if (e.key === 'Escape') {
+                                closeModal();
+                              }
+                            };
+                            
+                            modal.appendChild(img);
+                            modal.appendChild(closeBtn);
+                            document.body.appendChild(modal);
+                            document.addEventListener('keydown', handleEsc);
+                            
+                            // Focar no modal para acessibilidade
+                            (modal as any).focus();
                           }}
+                          loading="lazy"
+                          crossOrigin="anonymous"
                         />
                       ) : (
                         <div

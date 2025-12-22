@@ -10,6 +10,9 @@ router.use(authenticate);
 // Listar todos os usuários (apenas admin)
 router.get('/', authorize('admin'), UserController.getAll);
 
+// Listar mecânicos (para transferência de OS)
+router.get('/mechanics', UserController.getMechanics);
+
 // Buscar usuário por ID
 router.get('/:id', UserController.getById);
 

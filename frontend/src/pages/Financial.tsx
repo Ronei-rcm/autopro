@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { DollarSign, TrendingUp, TrendingDown, Plus, Edit, Trash2, X, Calendar } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
@@ -52,7 +53,13 @@ interface DashboardData {
 }
 
 const Financial = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'payables' | 'receivables' | 'cashflow'>('dashboard');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const orderIdParam = searchParams.get('order_id');
+  const tabParam = searchParams.get('tab');
+  
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'payables' | 'receivables' | 'cashflow'>(
+    (tabParam as 'dashboard' | 'payables' | 'receivables' | 'cashflow') || 'dashboard'
+  );
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [payables, setPayables] = useState<Payable[]>([]);
   const [receivables, setReceivables] = useState<Receivable[]>([]);
@@ -91,6 +98,13 @@ const Financial = () => {
   const [installmentCount, setInstallmentCount] = useState(2);
 
   useEffect(() => {
+    // Se houver order_id na URL, abrir aba de receivables
+    if (orderIdParam) {
+      setActiveTab('receivables');
+      // Carregar dados da OS e preencher formulário
+      loadOrderData(parseInt(orderIdParam));
+    }
+    
     if (activeTab === 'dashboard') {
       loadDashboard();
     } else if (activeTab === 'payables') {
@@ -100,7 +114,49 @@ const Financial = () => {
       loadReceivables();
       loadClients();
     }
-  }, [activeTab]);
+  }, [activeTab, orderIdParam, tabParam]);
+
+  const loadOrderData = async (orderId: number) => {
+    try {
+      const response = await api.get(`/orders/${orderId}`);
+      const order = response.data;
+      
+      // Verificar se já existe conta a receber para esta OS
+      const receivablesResponse = await api.get(`/financial/receivables?order_id=${orderId}`);
+      const existingReceivables = receivablesResponse.data;
+      
+      if (existingReceivables.length > 0) {
+        toast(`Já existe ${existingReceivables.length} conta(s) a receber para esta OS.`, {
+          duration: 5000,
+          icon: 'ℹ️'
+        });
+        return;
+      }
+      
+      // Preencher formulário com dados da OS
+      setReceivableFormData({
+        client_id: order.client_id.toString(),
+        description: `OS #${order.order_number} - ${order.client_name || ''} - ${order.brand || ''} ${order.model || ''} ${order.plate ? `(${order.plate})` : ''}`,
+        due_date: new Date().toISOString().split('T')[0],
+        amount: order.total?.toString() || '0',
+        paid_amount: '0',
+        payment_date: '',
+        payment_method: '',
+        status: 'open',
+        notes: `Gerada automaticamente da OS #${order.order_number}`,
+      });
+      
+      // Abrir modal de criação
+      setShowReceivableModal(true);
+      
+      toast.success('Formulário preenchido com dados da OS. Complete e salve para criar a conta a receber.', {
+        duration: 5000
+      });
+    } catch (error: any) {
+      console.error('Erro ao carregar dados da OS:', error);
+      toast.error('Erro ao carregar dados da ordem de serviço');
+    }
+  };
 
   const loadDashboard = async () => {
     try {
@@ -131,8 +187,18 @@ const Financial = () => {
   const loadReceivables = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/financial/receivables');
+      const url = orderIdParam 
+        ? `/financial/receivables?order_id=${orderIdParam}`
+        : '/financial/receivables';
+      const response = await api.get(url);
       setReceivables(response.data);
+      
+      // Se veio de uma ordem, mostrar mensagem
+      if (orderIdParam && response.data.length > 0) {
+        toast.success(`Encontradas ${response.data.length} conta(s) a receber vinculada(s) a esta ordem`, {
+          duration: 5000
+        });
+      }
     } catch (error: any) {
       toast.error('Erro ao carregar contas a receber');
       console.error(error);
@@ -213,6 +279,7 @@ const Financial = () => {
         payment_date: receivableFormData.payment_date ? new Date(receivableFormData.payment_date).toISOString() : null,
         payment_method: receivableFormData.payment_method || null,
         notes: receivableFormData.notes || null,
+        order_id: orderIdParam ? parseInt(orderIdParam) : undefined,
         installments: useInstallments && installments.length > 0 ? installments.map(inst => ({
           due_date: new Date(inst.due_date).toISOString(),
           amount: parseFloat(inst.amount.toString()),
@@ -230,6 +297,10 @@ const Financial = () => {
       }
       setShowReceivableModal(false);
       resetReceivableForm();
+      // Limpar order_id da URL após criar
+      if (orderIdParam) {
+        setSearchParams({});
+      }
       loadReceivables();
       loadDashboard();
     } catch (error: any) {
@@ -606,6 +677,44 @@ const Financial = () => {
       {/* Contas a Receber Tab */}
       {activeTab === 'receivables' && (
         <div>
+          {orderIdParam && (
+            <div style={{
+              padding: '1rem',
+              backgroundColor: '#fef3c7',
+              border: '1px solid #fbbf24',
+              borderRadius: '8px',
+              marginBottom: '1rem',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <strong style={{ color: '#92400e' }}>Filtrado por Ordem de Serviço</strong>
+                <div style={{ fontSize: '0.875rem', color: '#78350f', marginTop: '0.25rem' }}>
+                  Mostrando contas a receber vinculadas à ordem #{orderIdParam}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setSearchParams({});
+                  setActiveTab('receivables');
+                  loadReceivables();
+                }}
+                style={{
+                  padding: '0.5rem 1rem',
+                  backgroundColor: '#fbbf24',
+                  color: '#78350f',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                }}
+              >
+                Remover Filtro
+              </button>
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
             <button
               onClick={() => {
@@ -649,14 +758,22 @@ const Financial = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {receivables.map((receivable) => {
+                  {receivables
+                    .filter((receivable) => !orderIdParam || receivable.order_id === parseInt(orderIdParam))
+                    .map((receivable) => {
                     const overdue = isOverdue(receivable.due_date, receivable.status);
+                    const isLinkedToOrder = orderIdParam && receivable.order_id === parseInt(orderIdParam);
                     return (
                       <tr
                         key={receivable.id}
                         style={{
                           borderBottom: '1px solid #e2e8f0',
-                          backgroundColor: overdue ? '#fef2f2' : 'white',
+                          backgroundColor: isLinkedToOrder 
+                            ? '#fef3c7' 
+                            : overdue 
+                              ? '#fef2f2' 
+                              : 'white',
+                          borderLeft: isLinkedToOrder ? '4px solid #f59e0b' : 'none',
                         }}
                       >
                         <td style={{ padding: '1rem', fontWeight: '600' }}>

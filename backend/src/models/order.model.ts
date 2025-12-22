@@ -295,7 +295,25 @@ export class OrderModel {
       'SELECT discount FROM orders WHERE id = $1',
       [orderId]
     );
-    const discount = parseFloat(orderResult.rows[0]?.discount || '0');
+    let discount = parseFloat(orderResult.rows[0]?.discount || '0');
+    
+    // Se não há itens, zerar o desconto automaticamente
+    if (subtotal === 0) {
+      discount = 0;
+      // Atualizar o desconto no banco
+      await pool.query(
+        'UPDATE orders SET discount = 0 WHERE id = $1',
+        [orderId]
+      );
+    } else if (discount > subtotal) {
+      // Se o desconto é maior que o subtotal, ajustar para o máximo possível
+      discount = subtotal;
+      await pool.query(
+        'UPDATE orders SET discount = $1 WHERE id = $2',
+        [discount, orderId]
+      );
+    }
+    
     const total = subtotal - discount;
 
     await pool.query(

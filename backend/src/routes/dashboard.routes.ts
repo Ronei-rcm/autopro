@@ -7,6 +7,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/overview', DashboardController.getOverview);
+router.get('/profile', DashboardController.getProfileDashboard);
 
 export default router;
 

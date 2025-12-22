@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Users, FileText, DollarSign, Package, Calendar, TrendingUp, AlertTriangle, Clock, RefreshCw } from 'lucide-react';
+import { RefreshCw, Shield } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../services/api';
-import KPICard from '../components/dashboard/KPICard';
 import SkeletonLoader from '../components/common/SkeletonLoader';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { usePermission } from '../hooks/usePermission';
+import { useAuth } from '../contexts/AuthContext';
+import MechanicDashboard from '../components/dashboard/MechanicDashboard';
+import FinancialDashboard from '../components/dashboard/FinancialDashboard';
+import AttendantDashboard from '../components/dashboard/AttendantDashboard';
+import AdminDashboard from '../components/dashboard/AdminDashboard';
 
 interface DashboardData {
   kpis: {
@@ -30,17 +34,28 @@ interface DashboardData {
 }
 
 const Dashboard = () => {
+  const { hasPermission, loading: permissionLoading } = usePermission('dashboard', 'view');
+  const { user } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadDashboard();
-  }, []);
+    // Admin sempre tem acesso, outros perfis precisam de permissão
+    if (!permissionLoading) {
+      if (user?.profile === 'admin' || hasPermission) {
+        loadDashboard();
+      } else {
+        setLoading(false);
+      }
+    }
+  }, [hasPermission, permissionLoading, user]);
 
   const loadDashboard = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/dashboard/overview');
+      // Usar endpoint personalizado por perfil
+      const endpoint = user?.profile === 'admin' ? '/dashboard/overview' : '/dashboard/profile';
+      const response = await api.get(endpoint);
       setData(response.data);
     } catch (error: any) {
       console.error('Erro ao carregar dashboard:', error);
@@ -78,6 +93,64 @@ const Dashboard = () => {
     };
     return labels[status] || status;
   };
+
+  // Se está carregando permissões, mostrar loading
+  if (permissionLoading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        minHeight: '60vh' 
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ 
+            border: '4px solid #f3f4f6', 
+            borderTop: '4px solid #f97316', 
+            borderRadius: '50%', 
+            width: '48px', 
+            height: '48px', 
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 1rem'
+          }} />
+          <p style={{ color: '#64748b' }}>Verificando permissões...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Se não tem permissão e não é admin, mostrar acesso negado
+  if (user?.profile !== 'admin' && !hasPermission) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        minHeight: '60vh',
+        flexDirection: 'column',
+        gap: '1rem',
+        padding: '2rem'
+      }}>
+        <div style={{ 
+          backgroundColor: '#fef2f2', 
+          border: '1px solid #fecaca', 
+          borderRadius: '8px', 
+          padding: '2rem',
+          maxWidth: '500px',
+          textAlign: 'center'
+        }}>
+          <Shield size={48} color="#dc2626" style={{ margin: '0 auto 1rem' }} />
+          <h2 style={{ color: '#dc2626', marginBottom: '0.5rem', fontSize: '1.5rem' }}>Acesso Negado</h2>
+          <p style={{ color: '#991b1b', marginBottom: '1rem', fontSize: '1rem' }}>
+            Você não tem permissão para acessar o Dashboard.
+          </p>
+          <p style={{ color: '#64748b', fontSize: '0.875rem' }}>
+            Entre em contato com o administrador para solicitar acesso.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -119,8 +192,53 @@ const Dashboard = () => {
     );
   }
 
-  const revenueTrend = calculateTrend(data.comparison.current_month, data.comparison.previous_month);
-  const ordersTrend = calculateTrend(data.comparison.current_orders, data.comparison.previous_orders);
+  const getProfileTitle = () => {
+    const titles: Record<string, { title: string; subtitle: string }> = {
+      admin: { title: 'Dashboard', subtitle: 'Visão geral do seu negócio' },
+      mechanic: { title: 'Meu Dashboard', subtitle: 'Suas ordens de serviço e desempenho' },
+      financial: { title: 'Dashboard Financeiro', subtitle: 'Contas, receitas e despesas' },
+      attendant: { title: 'Dashboard de Atendimento', subtitle: 'Agendamentos e clientes' },
+    };
+    return titles[user?.profile || 'admin'] || titles.admin;
+  };
+
+  const profileInfo = getProfileTitle();
+
+  const renderDashboard = () => {
+    if (!data) return null;
+
+    const commonProps = {
+      data,
+      formatCurrency,
+    };
+
+    switch (user?.profile) {
+      case 'admin':
+        return (
+          <AdminDashboard
+            {...commonProps}
+            calculateTrend={calculateTrend}
+            getTrendColor={getTrendColor}
+            getStatusLabel={getStatusLabel}
+          />
+        );
+      case 'mechanic':
+        return <MechanicDashboard {...commonProps} />;
+      case 'financial':
+        return <FinancialDashboard {...commonProps} />;
+      case 'attendant':
+        return <AttendantDashboard {...commonProps} />;
+      default:
+        return (
+          <AdminDashboard
+            {...commonProps}
+            calculateTrend={calculateTrend}
+            getTrendColor={getTrendColor}
+            getStatusLabel={getStatusLabel}
+          />
+        );
+    }
+  };
 
   return (
     <div>
@@ -134,10 +252,10 @@ const Dashboard = () => {
             marginBottom: '0.5rem',
             lineHeight: '1.2',
           }}>
-            Dashboard
+            {profileInfo.title}
           </h1>
           <p style={{ color: '#64748b', fontSize: 'clamp(0.875rem, 2vw, 0.9rem)' }}>
-            Visão geral do seu negócio
+            {profileInfo.subtitle}
           </p>
         </div>
         <button
@@ -168,276 +286,8 @@ const Dashboard = () => {
         </button>
       </header>
 
-      {/* KPIs */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: '1rem',
-          marginBottom: '2rem',
-        }}
-        className="dashboard-kpis"
-      >
-        <KPICard
-          title="Clientes"
-          value={data.kpis.total_clients.toString()}
-          icon={Users}
-          trend={undefined}
-          trendColor="#10b981"
-          iconColor="#10b981"
-        />
-        <KPICard
-          title="OS Ativas"
-          value={data.kpis.active_orders.toString()}
-          icon={FileText}
-          bgColor="#fff7ed"
-          iconColor="#f97316"
-        />
-        <KPICard
-          title="Faturamento do Mês"
-          value={formatCurrency(parseFloat(data.kpis.revenue_month.toString()))}
-          icon={DollarSign}
-          trend={`${revenueTrend} vs mês anterior`}
-          trendColor={getTrendColor(data.comparison.current_month, data.comparison.previous_month)}
-          bgColor="#f0fdf4"
-          iconColor="#10b981"
-        />
-        <KPICard
-          title="OS Finalizadas (Mês)"
-          value={data.kpis.finished_orders_month.toString()}
-          icon={FileText}
-          trend={`${ordersTrend} vs mês anterior`}
-          trendColor={getTrendColor(data.comparison.current_orders, data.comparison.previous_orders)}
-          bgColor="#eff6ff"
-          iconColor="#3b82f6"
-        />
-        <KPICard
-          title="Estoque Baixo"
-          value={data.kpis.low_stock_count.toString()}
-          icon={Package}
-          bgColor="#fef3c7"
-          iconColor="#f59e0b"
-        />
-        <KPICard
-          title="Contas Vencidas"
-          value={(data.kpis.overdue_receivables + data.kpis.overdue_payables).toString()}
-          icon={AlertTriangle}
-          bgColor="#fee2e2"
-          iconColor="#ef4444"
-        />
-        <KPICard
-          title="Próximos Agendamentos"
-          value={data.kpis.upcoming_appointments.toString()}
-          icon={Calendar}
-          bgColor="#f0fdf4"
-          iconColor="#10b981"
-        />
-      </div>
-
-      {/* Charts Row 1 */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-          gap: '1rem',
-          marginBottom: '1.5rem',
-        }}
-        className="dashboard-charts"
-      >
-        {/* Receita dos Últimos 6 Meses */}
-        <div
-          style={{
-            padding: '1.5rem',
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-          }}
-        >
-          <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <TrendingUp size={18} color="#10b981" />
-            Receita dos Últimos 6 Meses
-          </h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={data.revenue}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip formatter={(value: number) => formatCurrency(value)} />
-              <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Distribuição de Serviços */}
-        <div
-          style={{
-            padding: '1.5rem',
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-          }}
-        >
-          <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <FileText size={18} color="#3b82f6" />
-            Distribuição de OS (Mês Atual)
-          </h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={data.services.map((s) => ({ status: getStatusLabel(s.status), count: s.count }))}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="status" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="count" fill="#f97316" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Charts Row 2 */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-          gap: '1rem',
-          marginBottom: '1.5rem',
-        }}
-        className="dashboard-charts"
-      >
-        {/* Vendas dos Últimos 7 Dias */}
-        <div
-          style={{
-            padding: '1.5rem',
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-          }}
-        >
-          <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Clock size={18} color="#f97316" />
-            Vendas dos Últimos 7 Dias
-          </h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={data.dailySales}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis yAxisId="left" />
-              <YAxis yAxisId="right" orientation="right" />
-              <Tooltip 
-                formatter={(value: number, name: string) => {
-                  if (name === 'revenue') return formatCurrency(value);
-                  return value;
-                }}
-              />
-              <Legend />
-              <Bar yAxisId="left" dataKey="orders" fill="#3b82f6" name="OS" />
-              <Bar yAxisId="right" dataKey="revenue" fill="#10b981" name="Receita" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Top Produtos */}
-        <div
-          style={{
-            padding: '1.5rem',
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-          }}
-        >
-          <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Package size={18} color="#10b981" />
-            Top 5 Produtos (Últimos 30 Dias)
-          </h3>
-          {data.topProducts.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {data.topProducts.map((product, index) => (
-                <div
-                  key={index}
-                  style={{
-                    padding: '1rem',
-                    backgroundColor: '#f8fafc',
-                    borderRadius: '8px',
-                    borderLeft: '3px solid #f97316',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <div style={{ fontWeight: '600', color: '#1e293b' }}>{product.name}</div>
-                    <div style={{ fontSize: '0.875rem', color: '#64748b' }}>
-                      Qtd: {product.quantity.toFixed(2)}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '0.875rem', color: '#10b981', fontWeight: '600' }}>
-                    {formatCurrency(product.revenue)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-              Nenhum produto vendido nos últimos 30 dias
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Comparação Mensal */}
-      <div
-        style={{
-          padding: '1.5rem',
-          backgroundColor: 'white',
-          borderRadius: '12px',
-          boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-        }}
-      >
-        <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <TrendingUp size={18} color="#3b82f6" />
-          Comparação Mensal
-        </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-          <div style={{ padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-            <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.5rem' }}>Receita - Mês Atual</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b' }}>
-              {formatCurrency(parseFloat(data.comparison.current_month.toString()))}
-            </div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
-              Mês anterior: {formatCurrency(parseFloat(data.comparison.previous_month.toString()))}
-            </div>
-          </div>
-          <div style={{ padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-            <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.5rem' }}>OS Finalizadas - Mês Atual</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b' }}>
-              {data.comparison.current_orders}
-            </div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
-              Mês anterior: {data.comparison.previous_orders}
-            </div>
-          </div>
-          <div style={{ padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-            <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.5rem' }}>Variação de Receita</div>
-            <div
-              style={{
-                fontSize: '1.5rem',
-                fontWeight: 'bold',
-                color: getTrendColor(data.comparison.current_month, data.comparison.previous_month),
-              }}
-            >
-              {revenueTrend}
-            </div>
-          </div>
-          <div style={{ padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-            <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.5rem' }}>Variação de OS</div>
-            <div
-              style={{
-                fontSize: '1.5rem',
-                fontWeight: 'bold',
-                color: getTrendColor(data.comparison.current_orders, data.comparison.previous_orders),
-              }}
-            >
-              {ordersTrend}
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Renderizar dashboard específico do perfil */}
+      {renderDashboard()}
     </div>
   );
 };

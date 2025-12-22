@@ -66,7 +66,7 @@ const Header = ({ isCollapsed, onToggleSidebar, isMobile = false, isMobileMenuOp
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 2rem',
+        padding: isMobile ? '0 1rem' : '0 2rem',
         position: 'sticky',
         top: 0,
         zIndex: 100,
@@ -141,7 +141,22 @@ const Header = ({ isCollapsed, onToggleSidebar, isMobile = false, isMobileMenuOp
           style={{
             position: 'relative',
             cursor: 'pointer',
-            padding: '0.5rem',
+            padding: isMobile ? '0.75rem' : '0.5rem',
+            minWidth: isMobile ? '44px' : 'auto',
+            minHeight: isMobile ? '44px' : 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '8px',
+            transition: 'background-color 0.2s',
+          }}
+          onTouchStart={(e) => {
+            e.currentTarget.style.backgroundColor = '#f8fafc';
+          }}
+          onTouchEnd={(e) => {
+            setTimeout(() => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }, 200);
           }}
         >
           <Bell size={22} color="#64748b" />
@@ -278,7 +293,7 @@ const Header = ({ isCollapsed, onToggleSidebar, isMobile = false, isMobileMenuOp
                     setShowUserMenu(false);
                     // TODO: Navegar para página de perfil quando criada
                     // navigate('/perfil');
-                    toast.info('Página de perfil em desenvolvimento');
+                    toast('Página de perfil em desenvolvimento', { icon: 'ℹ️' });
                   }}
                   style={{
                     width: '100%',

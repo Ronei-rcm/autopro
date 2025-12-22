@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { PermissionProvider } from './contexts/PermissionContext';
 import PrivateRoute from './components/common/PrivateRoute';
 import MainLayout from './components/layout/MainLayout';
 import HelpAssistant from './components/ai/HelpAssistant';
@@ -26,6 +27,7 @@ const Appointments = lazy(() => import('./pages/Appointments'));
 const Financial = lazy(() => import('./pages/Financial'));
 // Reports com tratamento de erro melhorado
 const Users = lazy(() => import('./pages/Users'));
+const Permissions = lazy(() => import('./pages/Permissions'));
 const Reports = lazy(async () => {
   try {
     return await import('./pages/Reports');
@@ -63,6 +65,7 @@ const Warranties = lazy(() => import('./pages/Warranties'));
 const OrderTemplates = lazy(() => import('./pages/OrderTemplates'));
 const Checklists = lazy(() => import('./pages/Checklists'));
 const Quotes = lazy(() => import('./pages/Quotes'));
+const WorkshopInfo = lazy(() => import('./pages/WorkshopInfo'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -79,7 +82,8 @@ const PageLoader = () => (
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter future={routerFutureFlags}>
+      <PermissionProvider>
+        <BrowserRouter future={routerFutureFlags}>
         <Toaster position="top-right" />
         <ErrorBoundary>
           <Suspense fallback={<PageLoader />}>
@@ -212,12 +216,38 @@ function App() {
               }
             />
             <Route
+              path="/permissoes"
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Suspense fallback={<PageLoader />}>
+                      <Permissions />
+                    </Suspense>
+                    <HelpAssistant />
+                  </MainLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
               path="/usuarios"
               element={
                 <PrivateRoute>
                   <MainLayout>
                     <Suspense fallback={<PageLoader />}>
                       <Users />
+                    </Suspense>
+                    <HelpAssistant />
+                  </MainLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/informacoes-oficina"
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Suspense fallback={<PageLoader />}>
+                      <WorkshopInfo />
                     </Suspense>
                     <HelpAssistant />
                   </MainLayout>
@@ -294,6 +324,7 @@ function App() {
         </Suspense>
         </ErrorBoundary>
       </BrowserRouter>
+      </PermissionProvider>
     </AuthProvider>
   );
 }

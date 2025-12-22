@@ -7,6 +7,9 @@ import { AccountReceivableModel } from '../models/account-receivable.model';
 import { InstallmentModel } from '../models/installment.model';
 import { OrderTemplateModel } from '../models/order-template.model';
 import { OrderFileModel } from '../models/order-file.model';
+import { WarrantyModel } from '../models/warranty.model';
+import { NotificationModel } from '../models/notification.model';
+import { UserModel } from '../models/user.model';
 import { body, validationResult } from 'express-validator';
 import { AuthRequest } from '../middleware/auth.middleware';
 import pool from '../config/database';
@@ -150,16 +153,111 @@ export class OrderController {
         return;
       }
 
-      const deleted = await OrderModel.delete(id);
-      if (!deleted) {
+      // Verificar se a ordem existe
+      const order = await OrderModel.findById(id);
+      if (!order) {
         res.status(404).json({ error: 'Ordem de serviço não encontrada' });
         return;
       }
 
-      res.status(204).send();
-    } catch (error) {
+      // Verificar se há contas a receber vinculadas
+      try {
+        const receivables = await AccountReceivableModel.findAll(undefined, undefined, undefined, undefined);
+        const linkedReceivables = receivables.filter((ar: any) => ar.order_id === id);
+        
+        if (linkedReceivables.length > 0) {
+          // Verificar se as contas estão pagas ou podem ser canceladas
+          const unpaidReceivables = linkedReceivables.filter((ar: any) => 
+            ar.status === 'open' || ar.status === 'overdue'
+          );
+          
+          if (unpaidReceivables.length > 0) {
+            res.status(400).json({ 
+              error: 'Não é possível excluir esta ordem de serviço pois existem contas a receber em aberto vinculadas. Cancele ou exclua as contas primeiro.',
+              linked_receivables: linkedReceivables.length,
+              unpaid_receivables: unpaidReceivables.length,
+              receivable_ids: unpaidReceivables.map((ar: any) => ar.id)
+            });
+            return;
+          }
+          
+          // Se todas as contas estão pagas ou canceladas, podemos continuar
+          // Mas vamos remover a referência primeiro para evitar erro de foreign key
+          const updateClient = await pool.connect();
+          try {
+            for (const receivable of linkedReceivables) {
+              await updateClient.query(
+                'UPDATE accounts_receivable SET order_id = NULL WHERE id = $1',
+                [receivable.id]
+              );
+            }
+          } finally {
+            updateClient.release();
+          }
+        }
+      } catch (receivableError: any) {
+        // Se falhar ao verificar, continuar (pode ser que a tabela não exista ainda)
+        console.warn('Aviso ao verificar contas a receber:', receivableError.message);
+      }
+
+      // Deletar usando transação para garantir consistência
+      const client = await pool.connect();
+      let transactionStarted = false;
+      
+      try {
+        await client.query('BEGIN');
+        transactionStarted = true;
+
+        // Deletar a ordem (CASCADE vai deletar itens, histórico, arquivos, garantias, etc)
+        const deleteResult = await client.query('DELETE FROM orders WHERE id = $1', [id]);
+        
+        if (!deleteResult.rowCount || deleteResult.rowCount === 0) {
+          await client.query('ROLLBACK');
+          transactionStarted = false;
+          client.release();
+          res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+          return;
+        }
+
+        await client.query('COMMIT');
+        transactionStarted = false;
+        client.release();
+        res.status(204).send();
+      } catch (dbError: any) {
+        if (transactionStarted) {
+          try {
+            await client.query('ROLLBACK');
+          } catch (rollbackError: any) {
+            console.error('Erro ao fazer rollback:', rollbackError);
+          }
+        }
+        client.release();
+        throw dbError;
+      }
+    } catch (error: any) {
       console.error('Delete order error:', error);
-      res.status(500).json({ error: 'Erro ao deletar ordem de serviço' });
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      
+      // Verificar tipo de erro
+      if (error.code === '23503') { // Foreign key violation
+        res.status(400).json({ 
+          error: 'Não é possível excluir esta ordem de serviço pois existem registros vinculados. Verifique contas a receber, garantias ou outros registros relacionados.',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+      } else if (error.code === '42P01') { // Table does not exist
+        res.status(500).json({ 
+          error: 'Erro ao deletar ordem de serviço. Tabela não encontrada.',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+      } else {
+        res.status(500).json({ 
+          error: 'Erro ao deletar ordem de serviço',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+          code: error.code
+        });
+      }
     }
   }
 
@@ -381,18 +479,42 @@ export class OrderController {
       }
 
       const existingOrder = await OrderModel.findById(id);
-      if (existingOrder && existingOrder.discount !== parseFloat(discount || '0')) {
+      if (!existingOrder) {
+        res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+        return;
+      }
+
+      let newDiscount = parseFloat(discount) || 0;
+      
+      // Validar que o desconto não pode ser maior que o subtotal
+      if (newDiscount > existingOrder.subtotal) {
+        res.status(400).json({ 
+          error: `O desconto não pode ser maior que o subtotal (R$ ${existingOrder.subtotal.toFixed(2)})`,
+          max_discount: existingOrder.subtotal
+        });
+        return;
+      }
+
+      // Se não há itens, não permitir desconto
+      if (existingOrder.subtotal === 0 && newDiscount > 0) {
+        res.status(400).json({ 
+          error: 'Não é possível adicionar desconto quando não há itens na ordem de serviço'
+        });
+        return;
+      }
+
+      if (existingOrder.discount !== newDiscount) {
         await OrderHistoryModel.create({
           order_id: id,
           field_changed: 'discount',
           old_value: existingOrder.discount.toString(),
-          new_value: discount,
+          new_value: newDiscount.toString(),
           changed_by: req.userId,
-          notes: `Desconto alterado de ${existingOrder.discount} para ${discount}`,
+          notes: `Desconto alterado de ${existingOrder.discount} para ${newDiscount}`,
         });
       }
 
-      await OrderModel.update(id, { discount: parseFloat(discount) || 0 });
+      await OrderModel.update(id, { discount: newDiscount });
       await OrderModel.updateTotals(id);
 
       const order = await OrderModel.findById(id);
@@ -418,12 +540,17 @@ export class OrderController {
       }
 
       // Verificar se já existe conta a receber para esta OS
-      const existingReceivables = await AccountReceivableModel.findAll(undefined, undefined, undefined, undefined);
-      const existingReceivable = existingReceivables.find((ar: any) => ar.order_id === orderId);
-      
-      if (existingReceivable) {
-        res.status(400).json({ error: 'Já existe uma conta a receber para esta ordem de serviço' });
-        return;
+      try {
+        const existingReceivables = await AccountReceivableModel.findAll(undefined, undefined, undefined, undefined);
+        const existingReceivable = existingReceivables.find((ar: any) => ar.order_id === orderId);
+        
+        if (existingReceivable) {
+          res.status(400).json({ error: 'Já existe uma conta a receber para esta ordem de serviço' });
+          return;
+        }
+      } catch (error: any) {
+        // Se houver erro ao buscar, continuar (pode ser que não exista ainda)
+        console.warn('Aviso ao verificar contas existentes:', error.message);
       }
 
       const { use_installments, installment_count, first_due_date, payment_method } = req.body;
@@ -455,45 +582,81 @@ export class OrderController {
 
       // Se usar parcelas, criar parcelas
       if (use_installments && installment_count && installment_count > 1) {
-        const baseAmount = Math.floor((order.total / installment_count) * 100) / 100;
-        const remainder = Math.round((order.total - (baseAmount * installment_count)) * 100) / 100;
-        const firstDueDate = new Date(first_due_date || defaultDueDate);
+        try {
+          // Calcular valores das parcelas com precisão
+          const totalAmount = parseFloat(order.total.toString());
+          const installmentCount = parseInt(installment_count.toString());
+          
+          if (installmentCount <= 0 || installmentCount > 24) {
+            throw new Error('Número de parcelas inválido (deve ser entre 1 e 24)');
+          }
+          
+          // Calcular valor base de cada parcela
+          const baseAmount = Math.floor((totalAmount / installmentCount) * 100) / 100;
+          // Calcular diferença para garantir que a soma seja exata
+          const totalBaseAmount = baseAmount * installmentCount;
+          const remainder = parseFloat((totalAmount - totalBaseAmount).toFixed(2));
+          
+          const firstDueDate = first_due_date ? new Date(first_due_date) : new Date(defaultDueDate);
 
-        const installmentPromises = [];
-        for (let i = 0; i < installment_count; i++) {
-          const installmentDueDate = new Date(firstDueDate);
-          installmentDueDate.setMonth(installmentDueDate.getMonth() + i);
+          const installmentPromises = [];
+          for (let i = 0; i < installmentCount; i++) {
+            const installmentDueDate = new Date(firstDueDate);
+            installmentDueDate.setMonth(installmentDueDate.getMonth() + i);
+            
+            // Primeira parcela recebe o resto para garantir que a soma seja exata
+            const amount = i === 0 
+              ? parseFloat((baseAmount + remainder).toFixed(2))
+              : parseFloat(baseAmount.toFixed(2));
+            
+            installmentPromises.push(
+              InstallmentModel.create({
+                account_receivable_id: receivable.id,
+                installment_number: i + 1,
+                due_date: installmentDueDate,
+                amount: amount,
+                paid_amount: 0,
+                status: 'open',
+                payment_method: payment_method || null,
+                notes: null,
+              })
+            );
+          }
           
-          const amount = i === 0 ? baseAmount + remainder : baseAmount;
-          
-          installmentPromises.push(
-            InstallmentModel.create({
-              account_receivable_id: receivable.id,
-              installment_number: i + 1,
-              due_date: installmentDueDate,
-              amount: amount,
-              paid_amount: 0,
-              status: 'open',
-              payment_method: payment_method || null,
-              notes: null,
-            })
-          );
+          await Promise.all(installmentPromises);
+        } catch (installmentError: any) {
+          console.error('Erro ao criar parcelas:', installmentError);
+          // Se falhar ao criar parcelas, ainda retornar a conta criada
+          // mas avisar sobre o problema
+          if (installmentError.code === '42P01') {
+            console.warn('Tabela installments não existe. Parcelas não foram criadas.');
+          } else {
+            // Re-throw para ser capturado pelo catch externo
+            throw installmentError;
+          }
         }
-        
-        await Promise.all(installmentPromises);
       }
 
       // Buscar conta completa com parcelas se houver
       const fullReceivable = await AccountReceivableModel.findById(receivable.id);
       if (fullReceivable) {
-        const installments = await InstallmentModel.findByReceivableId(receivable.id);
-        res.status(201).json({ ...fullReceivable, installments });
+        try {
+          const installments = await InstallmentModel.findByReceivableId(receivable.id);
+          res.status(201).json({ ...fullReceivable, installments: installments || [] });
+        } catch (installmentError: any) {
+          // Se falhar ao buscar parcelas, retornar sem elas
+          console.warn('Aviso ao buscar parcelas:', installmentError.message);
+          res.status(201).json({ ...fullReceivable, installments: [] });
+        }
       } else {
         res.status(201).json(receivable);
       }
     } catch (error: any) {
       console.error('Generate receivable error:', error);
-      res.status(500).json({ error: 'Erro ao gerar conta a receber' });
+      res.status(500).json({ 
+        error: 'Erro ao gerar conta a receber',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
     }
   }
 
@@ -609,10 +772,145 @@ export class OrderController {
 
       await OrderModel.update(id, updateData);
       const updatedOrder = await OrderModel.findById(id);
+
+      // Criar notificação para o financeiro quando OS é finalizada
+      if (action === 'finish' && updatedOrder) {
+        try {
+          const formattedTotal = new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+          }).format(Number(updatedOrder.total || 0));
+
+          await NotificationModel.create({
+            profile: 'financial',
+            type: 'order_finished',
+            title: `OS #${updatedOrder.order_number} Finalizada`,
+            message: `A ordem de serviço #${updatedOrder.order_number} do cliente ${updatedOrder.client_name || 'N/A'} foi finalizada. Valor total: ${formattedTotal}. Gere a conta a receber para continuar o processo.`,
+            reference_type: 'order',
+            reference_id: id,
+            action_url: `/financeiro?order_id=${id}`,
+            read: false,
+          });
+        } catch (notifError) {
+          // Não falhar a requisição se a notificação falhar
+          console.error('Erro ao criar notificação:', notifError);
+        }
+      }
+
       res.json(updatedOrder);
     } catch (error) {
       console.error('Quick action error:', error);
       res.status(500).json({ error: 'Erro ao executar ação' });
+    }
+  }
+
+  // Assumir OS (mecânico assume uma OS sem mecânico ou de outro mecânico)
+  static async assumeOrder(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const id = parseInt(req.params.id);
+      const userId = req.userId;
+
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'ID inválido' });
+        return;
+      }
+
+      const order = await OrderModel.findById(id);
+      if (!order) {
+        res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+        return;
+      }
+
+      // Verificar se a OS já está finalizada ou cancelada
+      if (order.status === 'finished' || order.status === 'cancelled') {
+        res.status(400).json({ error: 'Não é possível assumir uma OS finalizada ou cancelada' });
+        return;
+      }
+
+      const previousMechanicId = order.mechanic_id;
+      const previousMechanicName = order.mechanic_name;
+
+      // Atualizar mecânico da OS
+      await OrderModel.update(id, { mechanic_id: userId });
+
+      // Registrar histórico
+      await OrderHistoryModel.create({
+        order_id: id,
+        field_changed: 'mechanic_id',
+        old_value: previousMechanicId?.toString() || 'Sem mecânico',
+        new_value: userId.toString(),
+        changed_by: userId,
+        notes: previousMechanicId 
+          ? `OS transferida de ${previousMechanicName || 'outro mecânico'} para o usuário atual`
+          : 'OS assumida pelo usuário atual',
+      });
+
+      const updatedOrder = await OrderModel.findById(id);
+      res.json(updatedOrder);
+    } catch (error) {
+      console.error('Assume order error:', error);
+      res.status(500).json({ error: 'Erro ao assumir ordem de serviço' });
+    }
+  }
+
+  // Transferir OS para outro mecânico
+  static async transferOrder(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const id = parseInt(req.params.id);
+      const { mechanic_id } = req.body;
+
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'ID da ordem inválido' });
+        return;
+      }
+
+      if (!mechanic_id || isNaN(parseInt(mechanic_id.toString()))) {
+        res.status(400).json({ error: 'ID do mecânico inválido' });
+        return;
+      }
+
+      const newMechanicId = parseInt(mechanic_id.toString());
+
+      const order = await OrderModel.findById(id);
+      if (!order) {
+        res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+        return;
+      }
+
+      // Verificar se a OS já está finalizada ou cancelada
+      if (order.status === 'finished' || order.status === 'cancelled') {
+        res.status(400).json({ error: 'Não é possível transferir uma OS finalizada ou cancelada' });
+        return;
+      }
+
+      // Verificar se o novo mecânico existe e é mecânico
+      const newMechanic = await UserModel.findById(newMechanicId);
+      if (!newMechanic || newMechanic.profile !== 'mechanic') {
+        res.status(400).json({ error: 'Mecânico inválido ou não encontrado' });
+        return;
+      }
+
+      const previousMechanicId = order.mechanic_id;
+      const previousMechanicName = order.mechanic_name;
+
+      // Atualizar mecânico da OS
+      await OrderModel.update(id, { mechanic_id: newMechanicId });
+
+      // Registrar histórico
+      await OrderHistoryModel.create({
+        order_id: id,
+        field_changed: 'mechanic_id',
+        old_value: previousMechanicId?.toString() || 'Sem mecânico',
+        new_value: newMechanicId.toString(),
+        changed_by: req.userId,
+        notes: `OS transferida de ${previousMechanicName || 'sem mecânico'} para ${newMechanic.name}`,
+      });
+
+      const updatedOrder = await OrderModel.findById(id);
+      res.json(updatedOrder);
+    } catch (error) {
+      console.error('Transfer order error:', error);
+      res.status(500).json({ error: 'Erro ao transferir ordem de serviço' });
     }
   }
 
@@ -677,22 +975,83 @@ export class OrderController {
         return;
       }
 
+      // Validar e calcular tamanho do arquivo
+      let fileSize: number;
+      try {
+        // Tentar calcular o tamanho do base64
+        fileSize = Buffer.from(file_data, 'base64').length;
+      } catch (error) {
+        // Se falhar, tentar calcular de outra forma
+        fileSize = Math.ceil((file_data.length * 3) / 4);
+      }
+      
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      if (fileSize > maxSize) {
+        res.status(400).json({ error: 'Arquivo muito grande. Tamanho máximo: 5MB' });
+        return;
+      }
+
       // Salvar arquivo (armazenando base64 no banco por simplicidade)
       // Para produção, idealmente salvar em storage (S3, etc) e guardar apenas o path
-      const file = await OrderFileModel.create({
-        order_id: id,
-        file_name,
-        file_path: file_data, // Armazenando base64 diretamente por simplicidade
-        file_type: file_type || 'photo',
-        file_size: Buffer.from(file_data, 'base64').length,
-        description: description || null,
-        uploaded_by: req.userId || undefined,
-      });
+      try {
+        // Garantir que a tabela existe e está com o tipo correto
+        await OrderFileModel.ensureTableExists();
+        
+        const file = await OrderFileModel.create({
+          order_id: id,
+          file_name,
+          file_path: file_data, // Armazenando base64 diretamente por simplicidade
+          file_type: file_type || 'photo',
+          file_size: fileSize,
+          description: description || null,
+          uploaded_by: req.userId || undefined,
+        });
 
-      res.status(201).json(file);
+        res.status(201).json(file);
+      } catch (dbError: any) {
+        // Verificar se é erro de campo muito longo (VARCHAR antigo)
+        if (dbError.message?.includes('value too long') || dbError.message?.includes('character varying')) {
+          console.error('Erro: campo file_path muito pequeno. Tentando alterar para TEXT...');
+          try {
+            // Tentar alterar o campo para TEXT
+            await pool.query(`ALTER TABLE order_files ALTER COLUMN file_path TYPE TEXT;`);
+            // Tentar novamente
+            const file = await OrderFileModel.create({
+              order_id: id,
+              file_name,
+              file_path: file_data,
+              file_type: file_type || 'photo',
+              file_size: fileSize,
+              description: description || null,
+              uploaded_by: req.userId || undefined,
+            });
+            res.status(201).json(file);
+            return;
+          } catch (alterError: any) {
+            res.status(500).json({ 
+              error: 'Erro ao salvar arquivo. O campo file_path precisa ser alterado para TEXT.',
+              details: alterError.message 
+            });
+            return;
+          }
+        }
+        
+        // Verificar se é erro de tabela não encontrada
+        if (dbError.code === '42P01' || dbError.message?.includes('does not exist')) {
+          res.status(500).json({ 
+            error: 'Tabela order_files não existe. Execute a migration 007_add_order_signatures_and_files.sql',
+            details: dbError.message 
+          });
+          return;
+        }
+        throw dbError;
+      }
     } catch (error: any) {
       console.error('Upload file error:', error);
-      res.status(500).json({ error: 'Erro ao fazer upload do arquivo' });
+      res.status(500).json({ 
+        error: 'Erro ao fazer upload do arquivo',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
     }
   }
 
@@ -738,6 +1097,69 @@ export class OrderController {
     } catch (error: any) {
       console.error('Get file error:', error);
       res.status(500).json({ error: 'Erro ao buscar arquivo' });
+    }
+  }
+
+  static async createWarranties(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const orderId = parseInt(req.params.id);
+      if (isNaN(orderId)) {
+        res.status(400).json({ error: 'ID da ordem inválido' });
+        return;
+      }
+
+      const order = await OrderModel.findById(orderId);
+      if (!order) {
+        res.status(404).json({ error: 'Ordem de serviço não encontrada' });
+        return;
+      }
+
+      const { warranties } = req.body; // Array de { order_item_id, warranty_period_days, description }
+
+      if (!Array.isArray(warranties) || warranties.length === 0) {
+        res.status(400).json({ error: 'Lista de garantias é obrigatória' });
+        return;
+      }
+
+      const items = await OrderModel.getItems(orderId);
+      const createdWarranties = [];
+
+      for (const warrantyData of warranties) {
+        const { order_item_id, warranty_period_days, description, notes } = warrantyData;
+
+        // Verificar se o item existe na ordem
+        const item = items.find(i => i.id === order_item_id);
+        if (!item) {
+          continue; // Pular itens inválidos
+        }
+
+        const startDate = new Date();
+        const endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + warranty_period_days);
+
+        const warranty = await WarrantyModel.create({
+          order_id: orderId,
+          order_item_id,
+          product_id: item.product_id || null,
+          labor_id: item.labor_id || null,
+          description: description || item.description,
+          warranty_period_days,
+          start_date: startDate,
+          end_date: endDate,
+          status: 'active',
+          notes: notes || null,
+        });
+
+        createdWarranties.push(warranty);
+      }
+
+      res.status(201).json({
+        message: `${createdWarranties.length} garantia(s) criada(s) com sucesso`,
+        warranties: createdWarranties,
+      });
+    } catch (error: any) {
+      console.error('Create warranties error:', error);
+      res.status(500).json({ error: 'Erro ao criar garantias' });
     }
   }
 }

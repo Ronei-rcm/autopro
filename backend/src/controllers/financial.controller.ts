@@ -129,10 +129,11 @@ export class FinancialController {
     try {
       const status = req.query.status as string | undefined;
       const clientId = req.query.client_id ? parseInt(req.query.client_id as string) : undefined;
+      const orderId = req.query.order_id ? parseInt(req.query.order_id as string) : undefined;
       const startDate = req.query.start_date ? new Date(req.query.start_date as string) : undefined;
       const endDate = req.query.end_date ? new Date(req.query.end_date as string) : undefined;
 
-      const receivables = await AccountReceivableModel.findAll(status, clientId, startDate, endDate);
+      const receivables = await AccountReceivableModel.findAll(status, clientId, startDate, endDate, orderId);
       res.json(receivables);
     } catch (error) {
       console.error('List receivables error:', error);

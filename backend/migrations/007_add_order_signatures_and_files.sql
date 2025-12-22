@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS order_files (
   id SERIAL PRIMARY KEY,
   order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
   file_name VARCHAR(255) NOT NULL,
-  file_path VARCHAR(500) NOT NULL,
+  file_path TEXT NOT NULL, -- TEXT para suportar base64 de arquivos maiores
   file_type VARCHAR(50) NOT NULL, -- 'photo', 'document', 'other'
   file_size INTEGER, -- em bytes
   description TEXT,

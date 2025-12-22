@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Wrench, Package, DollarSign, Plus, Edit, Trash2 } from 'lucide-react';
+import { Wrench, Package, DollarSign, Plus, Edit, Trash2, Building2, Upload, X } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { formatCNPJ, formatCEP, formatPhone, removeNonNumeric, fetchAddressByCEP } from '../utils/formatters';
 
 interface LaborType {
   id: number;
@@ -12,8 +13,32 @@ interface LaborType {
   active: boolean;
 }
 
+interface WorkshopInfo {
+  id: number;
+  name: string;
+  trade_name?: string | null;
+  cnpj?: string | null;
+  state_registration?: string | null;
+  municipal_registration?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
+  address_street?: string | null;
+  address_number?: string | null;
+  address_complement?: string | null;
+  address_neighborhood?: string | null;
+  address_city?: string | null;
+  address_state?: string | null;
+  address_zipcode?: string | null;
+  logo_path?: string | null;
+  logo_base64?: string | null;
+  notes?: string | null;
+  terms_and_conditions?: string | null;
+  footer_text?: string | null;
+}
+
 const Settings = () => {
-  const [activeTab, setActiveTab] = useState<'labor' | 'categories'>('labor');
+  const [activeTab, setActiveTab] = useState<'labor' | 'categories' | 'workshop'>('labor');
   const [laborTypes, setLaborTypes] = useState<LaborType[]>([]);
   const [productCategories, setProductCategories] = useState<string[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
@@ -32,12 +57,38 @@ const Settings = () => {
   const [categoryFormData, setCategoryFormData] = useState({
     name: '',
   });
+  const [workshopInfo, setWorkshopInfo] = useState<WorkshopInfo | null>(null);
+  const [workshopFormData, setWorkshopFormData] = useState({
+    name: '',
+    trade_name: '',
+    cnpj: '',
+    state_registration: '',
+    municipal_registration: '',
+    phone: '',
+    email: '',
+    website: '',
+    address_street: '',
+    address_number: '',
+    address_complement: '',
+    address_neighborhood: '',
+    address_city: '',
+    address_state: '',
+    address_zipcode: '',
+    notes: '',
+    terms_and_conditions: '',
+    footer_text: '',
+  });
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [loadingCEP, setLoadingCEP] = useState(false);
+  const [savingWorkshop, setSavingWorkshop] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'labor') {
       loadLaborTypes();
-    } else {
+    } else if (activeTab === 'categories') {
       loadCategories();
+    } else if (activeTab === 'workshop') {
+      loadWorkshopInfo();
     }
   }, [activeTab]);
 
@@ -158,6 +209,119 @@ const Settings = () => {
     setEditingLabor(null);
   };
 
+  const loadWorkshopInfo = async () => {
+    try {
+      const response = await api.get('/workshop-info');
+      const info = response.data;
+      setWorkshopInfo(info);
+      setWorkshopFormData({
+        name: info.name || '',
+        trade_name: info.trade_name || '',
+        cnpj: info.cnpj || '',
+        state_registration: info.state_registration || '',
+        municipal_registration: info.municipal_registration || '',
+        phone: info.phone || '',
+        email: info.email || '',
+        website: info.website || '',
+        address_street: info.address_street || '',
+        address_number: info.address_number || '',
+        address_complement: info.address_complement || '',
+        address_neighborhood: info.address_neighborhood || '',
+        address_city: info.address_city || '',
+        address_state: info.address_state || '',
+        address_zipcode: info.address_zipcode || '',
+        notes: info.notes || '',
+        terms_and_conditions: info.terms_and_conditions || '',
+        footer_text: info.footer_text || '',
+      });
+      if (info.logo_base64) {
+        setLogoPreview(info.logo_base64);
+      }
+    } catch (error: any) {
+      toast.error('Erro ao carregar informações da oficina');
+      console.error(error);
+    }
+  };
+
+  const handleWorkshopSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSavingWorkshop(true);
+      const data = {
+        ...workshopFormData,
+        cnpj: workshopFormData.cnpj ? removeNonNumeric(workshopFormData.cnpj) : null,
+        address_zipcode: workshopFormData.address_zipcode ? removeNonNumeric(workshopFormData.address_zipcode) : null,
+        logo_base64: logoPreview,
+      };
+      await api.put('/workshop-info', data);
+      toast.success('Informações da oficina atualizadas com sucesso!');
+      loadWorkshopInfo();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Erro ao salvar informações da oficina');
+    } finally {
+      setSavingWorkshop(false);
+    }
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validar tipo de arquivo
+    if (!file.type.startsWith('image/')) {
+      toast.error('Por favor, selecione uma imagem');
+      return;
+    }
+
+    // Validar tamanho (máximo 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 2MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      setLogoPreview(base64String);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoPreview(null);
+  };
+
+  const handleCEPChange = async (value: string) => {
+    const formatted = formatCEP(value);
+    setWorkshopFormData({ ...workshopFormData, address_zipcode: formatted });
+
+    const cleanCEP = removeNonNumeric(value);
+    if (cleanCEP.length === 8) {
+      setLoadingCEP(true);
+      try {
+        const addressData = await fetchAddressByCEP(formatted);
+        if (addressData) {
+          setWorkshopFormData((prev) => ({
+            ...prev,
+            address_zipcode: formatted,
+            address_street: addressData.logradouro || prev.address_street,
+            address_neighborhood: addressData.bairro || prev.address_neighborhood,
+            address_city: addressData.localidade || prev.address_city,
+            address_state: addressData.uf || prev.address_state,
+          }));
+          toast.success('Endereço preenchido automaticamente!');
+        } else {
+          toast.error('CEP não encontrado');
+        }
+      } catch (error) {
+        console.error('Erro ao buscar CEP:', error);
+        toast.error('Erro ao buscar CEP. Tente novamente.');
+      } finally {
+        setLoadingCEP(false);
+      }
+    }
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -214,6 +378,24 @@ const Settings = () => {
         >
           <Package size={18} />
           Categorias
+        </button>
+        <button
+          onClick={() => setActiveTab('workshop')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.75rem 1.5rem',
+            border: 'none',
+            backgroundColor: 'transparent',
+            borderBottom: activeTab === 'workshop' ? '2px solid #f97316' : '2px solid transparent',
+            cursor: 'pointer',
+            fontWeight: activeTab === 'workshop' ? '600' : '400',
+            color: activeTab === 'workshop' ? '#f97316' : '#64748b',
+          }}
+        >
+          <Building2 size={18} />
+          Informações da Oficina
         </button>
       </div>
 
@@ -481,6 +663,462 @@ const Settings = () => {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Informações da Oficina Tab */}
+      {activeTab === 'workshop' && (
+        <div>
+          <form onSubmit={handleWorkshopSubmit}>
+            <div style={{ backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)', padding: '2rem' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Building2 size={20} color="#f97316" />
+                Dados da Oficina
+              </h3>
+
+              {/* Logo */}
+              <div style={{ marginBottom: '2rem', padding: '1.5rem', backgroundColor: '#f8fafc', borderRadius: '8px', border: '2px dashed #e2e8f0' }}>
+                <label style={{ display: 'block', marginBottom: '1rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                  Logo da Oficina
+                </label>
+                {logoPreview ? (
+                  <div style={{ position: 'relative', display: 'inline-block' }}>
+                    <img
+                      src={logoPreview}
+                      alt="Logo da oficina"
+                      style={{ maxWidth: '200px', maxHeight: '100px', objectFit: 'contain', borderRadius: '8px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRemoveLogo}
+                      style={{
+                        position: 'absolute',
+                        top: '-10px',
+                        right: '-10px',
+                        padding: '0.25rem',
+                        backgroundColor: '#ef4444',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '50%',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <label
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '2rem',
+                      border: '2px dashed #cbd5e1',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      backgroundColor: 'white',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = '#f97316';
+                      e.currentTarget.style.backgroundColor = '#fff7ed';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = '#cbd5e1';
+                      e.currentTarget.style.backgroundColor = 'white';
+                    }}
+                  >
+                    <Upload size={32} color="#64748b" style={{ marginBottom: '0.5rem' }} />
+                    <span style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '600' }}>
+                      Clique para fazer upload do logo
+                    </span>
+                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                      PNG, JPG ou SVG (máx. 2MB)
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                )}
+              </div>
+
+              {/* Dados Básicos */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    Nome da Oficina *
+                  </label>
+                  <input
+                    type="text"
+                    value={workshopFormData.name}
+                    onChange={(e) => setWorkshopFormData({ ...workshopFormData, name: e.target.value })}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    Nome Fantasia
+                  </label>
+                  <input
+                    type="text"
+                    value={workshopFormData.trade_name}
+                    onChange={(e) => setWorkshopFormData({ ...workshopFormData, trade_name: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    CNPJ
+                  </label>
+                  <input
+                    type="text"
+                    value={workshopFormData.cnpj}
+                    onChange={(e) => {
+                      const formatted = formatCNPJ(e.target.value);
+                      setWorkshopFormData({ ...workshopFormData, cnpj: formatted });
+                    }}
+                    placeholder="00.000.000/0000-00"
+                    maxLength={18}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    Inscrição Estadual
+                  </label>
+                  <input
+                    type="text"
+                    value={workshopFormData.state_registration}
+                    onChange={(e) => setWorkshopFormData({ ...workshopFormData, state_registration: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    Inscrição Municipal
+                  </label>
+                  <input
+                    type="text"
+                    value={workshopFormData.municipal_registration}
+                    onChange={(e) => setWorkshopFormData({ ...workshopFormData, municipal_registration: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Contato */}
+              <h4 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '1rem', marginTop: '2rem' }}>Contato</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    Telefone
+                  </label>
+                  <input
+                    type="text"
+                    value={workshopFormData.phone}
+                    onChange={(e) => {
+                      const formatted = formatPhone(e.target.value);
+                      setWorkshopFormData({ ...workshopFormData, phone: formatted });
+                    }}
+                    placeholder="(00) 00000-0000"
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={workshopFormData.email}
+                    onChange={(e) => setWorkshopFormData({ ...workshopFormData, email: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    Website
+                  </label>
+                  <input
+                    type="url"
+                    value={workshopFormData.website}
+                    onChange={(e) => setWorkshopFormData({ ...workshopFormData, website: e.target.value })}
+                    placeholder="https://www.exemplo.com.br"
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Endereço */}
+              <h4 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '1rem', marginTop: '2rem' }}>Endereço</h4>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                  CEP
+                </label>
+                <input
+                  type="text"
+                  value={workshopFormData.address_zipcode}
+                  onChange={(e) => handleCEPChange(e.target.value)}
+                  placeholder="00000-000"
+                  maxLength={9}
+                  disabled={loadingCEP}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem',
+                    backgroundColor: loadingCEP ? '#f8fafc' : 'white',
+                  }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    Rua
+                  </label>
+                  <input
+                    type="text"
+                    value={workshopFormData.address_street}
+                    onChange={(e) => setWorkshopFormData({ ...workshopFormData, address_street: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    Número
+                  </label>
+                  <input
+                    type="text"
+                    value={workshopFormData.address_number}
+                    onChange={(e) => setWorkshopFormData({ ...workshopFormData, address_number: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    Complemento
+                  </label>
+                  <input
+                    type="text"
+                    value={workshopFormData.address_complement}
+                    onChange={(e) => setWorkshopFormData({ ...workshopFormData, address_complement: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    Bairro
+                  </label>
+                  <input
+                    type="text"
+                    value={workshopFormData.address_neighborhood}
+                    onChange={(e) => setWorkshopFormData({ ...workshopFormData, address_neighborhood: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    Cidade
+                  </label>
+                  <input
+                    type="text"
+                    value={workshopFormData.address_city}
+                    onChange={(e) => setWorkshopFormData({ ...workshopFormData, address_city: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                    Estado
+                  </label>
+                  <input
+                    type="text"
+                    value={workshopFormData.address_state}
+                    onChange={(e) => setWorkshopFormData({ ...workshopFormData, address_state: e.target.value.toUpperCase() })}
+                    maxLength={2}
+                    placeholder="RS"
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Textos para Documentos */}
+              <h4 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '1rem', marginTop: '2rem' }}>Textos para Documentos</h4>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                  Texto do Rodapé
+                </label>
+                <textarea
+                  value={workshopFormData.footer_text}
+                  onChange={(e) => setWorkshopFormData({ ...workshopFormData, footer_text: e.target.value })}
+                  rows={3}
+                  placeholder="Este documento foi gerado automaticamente pelo sistema de gestão."
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem',
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                  Termos e Condições Padrão
+                </label>
+                <textarea
+                  value={workshopFormData.terms_and_conditions}
+                  onChange={(e) => setWorkshopFormData({ ...workshopFormData, terms_and_conditions: e.target.value })}
+                  rows={5}
+                  placeholder="Termos e condições que aparecerão nos documentos..."
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem',
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
+                  Observações Gerais
+                </label>
+                <textarea
+                  value={workshopFormData.notes}
+                  onChange={(e) => setWorkshopFormData({ ...workshopFormData, notes: e.target.value })}
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem',
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
+                <button
+                  type="submit"
+                  disabled={savingWorkshop}
+                  style={{
+                    padding: '0.75rem 2rem',
+                    backgroundColor: savingWorkshop ? '#cbd5e1' : '#f97316',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: savingWorkshop ? 'not-allowed' : 'pointer',
+                    fontWeight: '600',
+                    fontSize: '0.9rem',
+                  }}
+                >
+                  {savingWorkshop ? 'Salvando...' : 'Salvar Informações'}
+                </button>
+              </div>
+            </div>
+          </form>
         </div>
       )}
 

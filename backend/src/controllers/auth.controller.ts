@@ -17,8 +17,26 @@ export class AuthController {
 
       const { email, password } = req.body;
 
+      if (!email || !password) {
+        res.status(400).json({ error: 'Email e senha são obrigatórios' });
+        return;
+      }
+
       // Buscar usuário com hash da senha
-      const userWithPassword = await UserModel.findByEmailWithPassword(email);
+      let userWithPassword;
+      try {
+        userWithPassword = await UserModel.findByEmailWithPassword(email);
+      } catch (dbError: any) {
+        console.error('Database error in findByEmailWithPassword:', dbError);
+        if (dbError.code === 'ECONNREFUSED' || dbError.code === 'ENOTFOUND' || dbError.code === 'ETIMEDOUT') {
+          res.status(500).json({ 
+            error: 'Erro de conexão com o banco de dados',
+            details: process.env.NODE_ENV === 'development' ? dbError.message : undefined
+          });
+          return;
+        }
+        throw dbError;
+      }
       
       if (!userWithPassword) {
         res.status(401).json({ error: 'Credenciais inválidas' });
@@ -26,7 +44,14 @@ export class AuthController {
       }
 
       // Verificar se usuário está ativo
-      const user = await UserModel.findById(userWithPassword.id);
+      let user;
+      try {
+        user = await UserModel.findById(userWithPassword.id);
+      } catch (dbError: any) {
+        console.error('Database error in findById:', dbError);
+        throw dbError;
+      }
+      
       if (!user || !user.active) {
         res.status(401).json({ error: 'Credenciais inválidas' });
         return;
@@ -34,17 +59,37 @@ export class AuthController {
 
       const passwordHash = userWithPassword.password_hash;
 
-      const isValid = await comparePassword(password, passwordHash);
+      if (!passwordHash) {
+        console.error('Password hash is null for user:', user.id);
+        res.status(500).json({ error: 'Erro ao processar login' });
+        return;
+      }
+
+      let isValid;
+      try {
+        isValid = await comparePassword(password, passwordHash);
+      } catch (passwordError: any) {
+        console.error('Password comparison error:', passwordError);
+        res.status(500).json({ error: 'Erro ao verificar senha' });
+        return;
+      }
 
       if (!isValid) {
         res.status(401).json({ error: 'Credenciais inválidas' });
         return;
       }
 
-      const token = generateToken({
-        userId: user.id,
-        profile: user.profile,
-      });
+      let token;
+      try {
+        token = generateToken({
+          userId: user.id,
+          profile: user.profile,
+        });
+      } catch (tokenError: any) {
+        console.error('Token generation error:', tokenError);
+        res.status(500).json({ error: 'Erro ao gerar token de autenticação' });
+        return;
+      }
 
       res.json({
         token,
@@ -55,9 +100,34 @@ export class AuthController {
           profile: user.profile,
         },
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
-      res.status(500).json({ error: 'Erro ao fazer login' });
+      console.error('Error stack:', error.stack);
+      console.error('Error message:', error.message);
+      console.error('Error code:', error.code);
+      
+      // Verificar tipo de erro específico
+      if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+        res.status(500).json({ 
+          error: 'Erro de conexão com o banco de dados. Verifique se o banco está rodando.',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+      } else if (error.code === '23505') { // Unique violation
+        res.status(500).json({ 
+          error: 'Erro ao processar login',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+      } else if (error.message?.includes('JWT_SECRET')) {
+        res.status(500).json({ 
+          error: 'Erro de configuração do servidor',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+      } else {
+        res.status(500).json({ 
+          error: 'Erro ao fazer login',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+      }
     }
   }
 

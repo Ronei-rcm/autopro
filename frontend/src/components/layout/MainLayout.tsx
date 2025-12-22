@@ -2,6 +2,7 @@ import { ReactNode, useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import { useGlobalShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { useResponsive } from '../../hooks/useResponsive';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -9,27 +10,21 @@ interface MainLayoutProps {
 
 const MainLayout = ({ children }: MainLayoutProps) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { isMobile, isTablet } = useResponsive();
 
   // Atalhos de teclado globais
   useGlobalShortcuts();
 
+  // Auto-collapse sidebar em mobile, expandir em desktop
   useEffect(() => {
-    const handleResize = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      // Auto-collapse on mobile, auto-expand on desktop
-      if (mobile) {
-        setIsCollapsed(false);
+    if (isMobile || isTablet) {
+      setIsCollapsed(false);
+      if (!isMobile) {
+        setIsMobileMenuOpen(false);
       }
-    };
-
-    window.addEventListener('resize', handleResize);
-    handleResize(); // Initial check
-
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    }
+  }, [isMobile, isTablet]);
 
   const toggleSidebar = () => {
     if (isMobile) {

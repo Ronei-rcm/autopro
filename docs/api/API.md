@@ -331,6 +331,59 @@ Atualiza o desconto da ordem. **Recalcula automaticamente o total.**
 }
 ```
 
+### POST /orders/:id/assume
+Assume uma ordem de serviço (mecânico assume uma OS sem mecânico ou de outro mecânico).
+
+**Autenticação:** Requerida
+
+**Permissões:** Admin ou Mecânico
+
+**Response:**
+```json
+{
+  "id": 1,
+  "order_number": "OS-2024-001",
+  "mechanic_id": 5,
+  "mechanic_name": "João Silva",
+  ...
+}
+```
+
+**Notas:**
+- Não é possível assumir OS finalizadas ou canceladas
+- Registra no histórico da OS
+- Se a OS já tinha mecânico, registra como transferência
+
+### POST /orders/:id/transfer
+Transfere uma ordem de serviço para outro mecânico.
+
+**Body:**
+```json
+{
+  "mechanic_id": 5
+}
+```
+
+**Autenticação:** Requerida
+
+**Permissões:** Admin ou Mecânico
+
+**Validações:**
+- O novo mecânico deve existir e ter perfil 'mechanic'
+- Não é possível transferir OS finalizadas ou canceladas
+- Registra no histórico da OS
+
+**Response:**
+```json
+{
+  "id": 1,
+  "order_number": "OS-2024-001",
+  "mechanic_id": 5,
+  "mechanic_name": "João Silva",
+  ...
+}
+```
+
 ### POST /orders/:id/quick-action
 Executa uma ação rápida na ordem.
 
@@ -627,7 +680,7 @@ Remove uma categoria.
 ## 📈 Dashboard
 
 ### GET /dashboard/overview
-Retorna dados completos do dashboard.
+Retorna dados completos do dashboard (apenas admin).
 
 **Response:**
 ```json
@@ -649,6 +702,46 @@ Retorna dados completos do dashboard.
   "comparison": {...}
 }
 ```
+
+### GET /dashboard/profile
+Retorna dados do dashboard personalizado por perfil do usuário.
+
+**Autenticação:** Requerida
+
+**Perfis:**
+- `admin` - Retorna dados completos (mesmo que `/dashboard/overview`)
+- `mechanic` - Dashboard do mecânico (OS atribuídas, tempo médio, etc.)
+- `financial` - Dashboard financeiro (contas a pagar/receber, fluxo de caixa, **OS pendentes**)
+- `attendant` - Dashboard do atendente (agendamentos, novos clientes, etc.)
+
+**Response (Financial):**
+```json
+{
+  "profile": "financial",
+  "kpis": {
+    "payables_total": 15000.00,
+    "receivables_total": 25000.00,
+    "cash_flow_balance": 10000.00,
+    ...
+  },
+  "pendingOrders": [
+    {
+      "id": 123,
+      "order_number": "OS-2024-001",
+      "client_name": "João Silva",
+      "total": 450.00,
+      "finished_at": "2024-12-22T10:30:00Z",
+      ...
+    }
+  ],
+  "pendingOrdersCount": 5,
+  ...
+}
+```
+
+**Notas:**
+- `pendingOrders`: OS finalizadas sem conta a receber (máximo 10)
+- `pendingOrdersCount`: Total de OS pendentes
 
 ---
 

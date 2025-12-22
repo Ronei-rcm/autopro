@@ -2,6 +2,33 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+// Função para ignorar o próprio config file no watch quando não está em Docker
+const watchOptions = () => {
+  const ignored = [
+    '**/node_modules/**',
+    '**/dist/**',
+    '**/.git/**',
+    '**/logs/**',
+    '**/*.log',
+    '**/.DS_Store',
+    '**/coverage/**',
+    '**/.vite/**',
+    '**/vite.config.ts.timestamp-*',
+  ];
+  
+  // Quando não está em Docker, ignorar o próprio config para evitar loops
+  // (em Docker, precisamos observar mudanças no config)
+  if (process.env.DOCKER_ENV !== 'true') {
+    ignored.push(path.resolve(__dirname, 'vite.config.ts'));
+  }
+  
+  return {
+    usePolling: process.env.DOCKER_ENV === 'true',
+    interval: process.env.DOCKER_ENV === 'true' ? 1000 : undefined,
+    ignored,
+  };
+};
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -25,7 +52,7 @@ export default defineConfig({
   server: {
     port: 5173,
     host: '0.0.0.0', // Permite acesso de qualquer IP
-    strictPort: false, // Não falhar se a porta estiver em uso
+    strictPort: true, // Falhar se a porta estiver em uso (para garantir que use 5173)
     allowedHosts: [
       'autopro.re9suainternet.com.br',
       'www.autopro.re9suainternet.com.br',
@@ -37,12 +64,9 @@ export default defineConfig({
       // Configuração HMR para acesso externo
       clientPort: 5173,
       protocol: 'ws',
+      overlay: true, // Mostrar erros sobrepostos
     },
-    watch: {
-      // Configuração de watch para volumes do Docker
-      usePolling: process.env.DOCKER_ENV === 'true',
-      interval: 1000,
-    },
+    watch: watchOptions(),
     proxy: {
       '/api': {
         // No Docker, o proxy do Vite roda no servidor e pode acessar 'backend'

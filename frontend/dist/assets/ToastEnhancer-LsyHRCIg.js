@@ -1,0 +1,1 @@
+import"./index-DNHKrThd.js";import{z as r}from"./ui-vendor-yLLZ9URH.js";const c=(o,s)=>r.success(o,{duration:3e3,icon:"✅",style:{background:"#f0fdf4",color:"#166534",border:"1px solid #86efac"}}),a=(o,s)=>r.error(o,{duration:4e3,icon:"❌",style:{background:"#fee2e2",color:"#991b1b",border:"1px solid #fca5a5"}});export{c as a,a as s};
