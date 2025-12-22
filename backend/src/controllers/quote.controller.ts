@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { QuoteModel } from '../models/quote.model';
 import { OrderModel } from '../models/order.model';
+import { AppointmentModel } from '../models/appointment.model';
+import { UserModel } from '../models/user.model';
 import { body, validationResult } from 'express-validator';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { QuoteStatus, Order } from '../types';
@@ -156,12 +158,6 @@ export class QuoteController {
       const existingQuote = await QuoteModel.findById(id);
       if (!existingQuote) {
         res.status(404).json({ error: 'Orçamento não encontrado' });
-        return;
-      }
-
-      // Não permitir excluir orçamento convertido
-      if (existingQuote.status === 'converted') {
-        res.status(400).json({ error: 'Não é possível excluir orçamento convertido' });
         return;
       }
 
@@ -342,6 +338,229 @@ export class QuoteController {
       res.status(500).json({ error: 'Erro ao remover item do orçamento' });
     }
   }
+
+  // Aprovar orçamento e criar agendamento
+  static async approveAndSchedule(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        const errorMessages = errors.array().map(err => ({
+          param: err.type === 'field' ? err.path : 'unknown',
+          msg: err.msg,
+        }));
+        res.status(400).json({ 
+          error: 'Erro de validação',
+          errors: errorMessages,
+          details: errorMessages.map(e => `${e.param}: ${e.msg}`).join(', ')
+        });
+        return;
+      }
+
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'ID inválido' });
+        return;
+      }
+
+      const quote = await QuoteModel.findById(id);
+      if (!quote) {
+        res.status(404).json({ error: 'Orçamento não encontrado' });
+        return;
+      }
+
+      if (quote.status !== 'open') {
+        res.status(400).json({ error: 'Apenas orçamentos abertos podem ser aprovados' });
+        return;
+      }
+
+      if (!quote.items || quote.items.length === 0) {
+        res.status(400).json({ error: 'Orçamento não possui itens' });
+        return;
+      }
+
+      const { mechanic_id, start_time, end_time, notes } = req.body;
+
+      console.log('Dados recebidos:', { mechanic_id, start_time, end_time, notes });
+      console.log('Tipo de mechanic_id:', typeof mechanic_id);
+
+      // Validar mecânico
+      if (!mechanic_id) {
+        res.status(400).json({ error: 'Mecânico é obrigatório' });
+        return;
+      }
+
+      const mechanicIdInt = parseInt(mechanic_id.toString());
+      if (isNaN(mechanicIdInt)) {
+        res.status(400).json({ error: 'ID do mecânico inválido' });
+        return;
+      }
+
+      const mechanic = await UserModel.findById(mechanicIdInt);
+      if (!mechanic || mechanic.profile !== 'mechanic') {
+        res.status(400).json({ error: 'Mecânico inválido ou não encontrado' });
+        return;
+      }
+
+      // Validar datas
+      if (!start_time || !end_time) {
+        res.status(400).json({ error: 'Data/hora de início e término são obrigatórias' });
+        return;
+      }
+
+      const startTime = new Date(start_time);
+      const endTime = new Date(end_time);
+
+      if (isNaN(startTime.getTime())) {
+        res.status(400).json({ error: 'Data/hora de início inválida' });
+        return;
+      }
+
+      if (isNaN(endTime.getTime())) {
+        res.status(400).json({ error: 'Data/hora de término inválida' });
+        return;
+      }
+
+      if (endTime <= startTime) {
+        res.status(400).json({ error: 'Data/hora de término deve ser posterior à data/hora de início' });
+        return;
+      }
+
+      const now = new Date();
+      now.setSeconds(0, 0); // Remover segundos para comparação justa
+      if (startTime < now) {
+        res.status(400).json({ error: 'Data/hora de início não pode ser no passado' });
+        return;
+      }
+
+      // Atualizar status do orçamento para 'approved'
+      await QuoteModel.updateStatus(id, 'approved');
+
+      // Criar OS automaticamente quando orçamento for aprovado
+      let createdOrder = null;
+      try {
+        const orderNumber = await OrderModel.generateOrderNumber();
+        
+        const orderData = {
+          quote_id: quote.id,
+          client_id: quote.client_id,
+          vehicle_id: quote.vehicle_id,
+          mechanic_id: mechanicIdInt,
+          order_number: orderNumber,
+          status: 'open' as const,
+          subtotal: quote.subtotal,
+          discount: quote.discount,
+          total: quote.total,
+          technical_notes: quote.notes || undefined,
+        };
+
+        createdOrder = await OrderModel.create(orderData);
+
+        // Adicionar itens da OS baseados nos itens do orçamento
+        if (quote.items && quote.items.length > 0) {
+          for (const item of quote.items) {
+            await OrderModel.addItem({
+              order_id: createdOrder.id,
+              product_id: item.product_id || null,
+              labor_id: item.labor_id || null,
+              description: item.description,
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+              total_price: item.total_price,
+              item_type: item.item_type,
+            });
+          }
+          // Atualizar totais da OS após adicionar todos os itens
+          await OrderModel.updateTotals(createdOrder.id);
+          // Buscar OS atualizada
+          createdOrder = await OrderModel.findById(createdOrder.id);
+        }
+
+        // Atualizar status do orçamento para 'converted'
+        await QuoteModel.updateStatus(id, 'converted');
+        
+        console.log('✅ OS criada automaticamente:', createdOrder.id, createdOrder.order_number);
+      } catch (orderError: any) {
+        console.error('❌ ERRO ao criar OS automaticamente:', orderError);
+        // Não impedir a criação do agendamento se a OS falhar
+        // Mas logar o erro para debug
+      }
+
+      // Criar agendamento (usar número da OS se foi criada, senão usar número do orçamento)
+      const orderOrQuoteNumber = createdOrder?.order_number || quote.quote_number;
+      const appointmentTitle = `OS - ${orderOrQuoteNumber} - ${quote.client_name || 'Cliente'}`;
+      const totalValue = typeof quote.total === 'number' ? quote.total : parseFloat(String(quote.total || '0'));
+      const formattedTotal = new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      }).format(totalValue);
+      const appointmentDescription = createdOrder 
+        ? `OS #${orderOrQuoteNumber} criada a partir do orçamento ${quote.quote_number}\nValor: ${formattedTotal}\n${notes || ''}`
+        : `Orçamento aprovado: ${quote.quote_number}\nValor: ${formattedTotal}\n${notes || ''}`;
+
+      console.log('=== INICIANDO CRIAÇÃO DE AGENDAMENTO ===');
+      console.log('Dados do orçamento:', {
+        quote_id: quote.id,
+        quote_number: quote.quote_number,
+        client_id: quote.client_id,
+        vehicle_id: quote.vehicle_id,
+        client_name: quote.client_name,
+      });
+      console.log('Dados do agendamento:', {
+        mechanic_id: parseInt(mechanic_id),
+        start_time: startTime,
+        end_time: endTime,
+        start_time_type: typeof startTime,
+        end_time_type: typeof endTime,
+        title: appointmentTitle,
+        description_length: appointmentDescription.length,
+      });
+
+      let appointment;
+      try {
+        const appointmentData = {
+          client_id: quote.client_id,
+          vehicle_id: quote.vehicle_id,
+          mechanic_id: mechanicIdInt,
+          service_type: 'Orçamento Aprovado',
+          title: appointmentTitle,
+          description: appointmentDescription,
+          start_time: startTime,
+          end_time: endTime,
+          status: 'scheduled',
+          notes: notes && notes.trim() ? notes.trim() : null,
+        };
+        console.log('Chamando AppointmentModel.create com:', appointmentData);
+        
+        appointment = await AppointmentModel.create(appointmentData);
+        
+        console.log('✅ Agendamento criado com sucesso!');
+        console.log('ID do agendamento:', appointment.id);
+        console.log('Dados retornados:', appointment);
+      } catch (appointmentError: any) {
+        console.error('❌ ERRO ao criar agendamento:');
+        console.error('Tipo do erro:', appointmentError.constructor.name);
+        console.error('Mensagem:', appointmentError.message);
+        console.error('Stack:', appointmentError.stack);
+        console.error('Erro completo:', appointmentError);
+        throw new Error(`Erro ao criar agendamento: ${appointmentError.message}`);
+      }
+
+      // Buscar orçamento atualizado
+      const updatedQuote = await QuoteModel.findById(id);
+
+      res.status(201).json({
+        quote: updatedQuote,
+        order: createdOrder, // Incluir OS criada na resposta
+        appointment: appointment,
+        message: createdOrder 
+          ? `Orçamento aprovado, OS #${createdOrder.order_number} criada e agendamento criado com sucesso`
+          : 'Orçamento aprovado e agendamento criado com sucesso',
+      });
+    } catch (error: any) {
+      console.error('Approve and schedule error:', error);
+      res.status(500).json({ error: 'Erro ao aprovar orçamento e criar agendamento' });
+    }
+  }
 }
 
 // Validações
@@ -372,4 +591,23 @@ export const addItemValidation = [
   body('item_type').isIn(['product', 'labor']).withMessage('Tipo de item inválido'),
   body('product_id').if(body('item_type').equals('product')).notEmpty().withMessage('product_id é obrigatório para produto'),
   body('labor_id').if(body('item_type').equals('labor')).notEmpty().withMessage('labor_id é obrigatório para serviço'),
+];
+
+export const approveAndScheduleValidation = [
+  body('mechanic_id')
+    .notEmpty().withMessage('Mecânico é obrigatório')
+    .custom((value) => {
+      const num = parseInt(value);
+      if (isNaN(num) || num <= 0) {
+        throw new Error('ID do mecânico inválido');
+      }
+      return true;
+    }),
+  body('start_time')
+    .notEmpty().withMessage('Data/hora de início é obrigatória')
+    .isISO8601().withMessage('Data/hora de início inválida (formato ISO8601 esperado)'),
+  body('end_time')
+    .notEmpty().withMessage('Data/hora de término é obrigatória')
+    .isISO8601().withMessage('Data/hora de término inválida (formato ISO8601 esperado)'),
+  body('notes').optional().isString().withMessage('Observações devem ser texto'),
 ];

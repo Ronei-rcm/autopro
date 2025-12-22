@@ -1,11 +1,20 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, FileText, Car, Wrench, Package, DollarSign, X, Eye, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Plus, Search, Edit, Trash2, FileText, Car, Wrench, Package, DollarSign, X, Eye, CheckCircle, Clock, AlertCircle, ExternalLink, UserCheck, ArrowRightLeft, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import OrderDetailModal from '../components/orders/OrderDetailModal';
 import SkeletonLoader from '../components/common/SkeletonLoader';
 import AdvancedFilters from '../components/common/AdvancedFilters';
 import Pagination from '../components/common/Pagination';
+import OrderStatusChip from '../components/orders/OrderStatusChip';
+import OrderCard from '../components/orders/OrderCard';
+import QuickActionsMenu from '../components/orders/QuickActionsMenu';
+import TransferOrderModal from '../components/orders/TransferOrderModal';
+import SearchableSelect from '../components/common/SearchableSelect';
+import { useResponsive } from '../hooks/useResponsive';
+import { useAuth } from '../contexts/AuthContext';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface Order {
   id: number;
@@ -69,6 +78,11 @@ interface LaborType {
 }
 
 const Orders = () => {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { isMobile } = useResponsive();
+  const { user } = useAuth();
+  const orderIdParam = searchParams.get('order_id');
   const [orders, setOrders] = useState<Order[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -79,11 +93,15 @@ const Orders = () => {
   const [search, setSearch] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [quickActionLoading, setQuickActionLoading] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [showModal, setShowModal] = useState(false);
   const [showItemModal, setShowItemModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferOrder, setTransferOrder] = useState<Order | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
@@ -108,6 +126,13 @@ const Orders = () => {
     unit_price: '0',
   });
   const [itemTotal, setItemTotal] = useState(0);
+  const [sortField, setSortField] = useState<keyof Order | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const itemModalRef = useRef<HTMLDivElement>(null);
+  const itemsListRef = useRef<HTMLDivElement>(null);
+
+  // Debounce na busca para melhorar performance
+  const debouncedSearch = useDebounce(search, 300);
 
   useEffect(() => {
     loadOrders();
@@ -116,7 +141,26 @@ const Orders = () => {
     loadLaborTypes();
     loadOrderTemplates();
     loadStatistics();
-  }, [search, selectedStatus, filters]);
+  }, [debouncedSearch, selectedStatus, filters]);
+
+  // Abrir OS específica se order_id estiver na URL
+  useEffect(() => {
+    if (orderIdParam) {
+      const orderId = parseInt(orderIdParam);
+      if (!isNaN(orderId)) {
+        // Aguardar carregar as ordens primeiro
+        const timer = setTimeout(() => {
+          const order = orders.find(o => o.id === orderId);
+          if (order) {
+            handleViewDetail(orderId);
+            // Remover parâmetro da URL
+            setSearchParams({});
+          }
+        }, 500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [orderIdParam, orders]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -135,7 +179,7 @@ const Orders = () => {
     try {
       setLoading(true);
       const params: Record<string, string> = {};
-      if (search) params.search = search;
+      if (debouncedSearch) params.search = debouncedSearch;
       if (selectedStatus) params.status = selectedStatus;
       Object.entries(filters).forEach(([key, value]) => {
         if (value) params[key] = value;
@@ -273,7 +317,10 @@ const Orders = () => {
       };
 
       await api.post(`/orders/${currentOrder.id}/items`, data);
-      toast.success('Item adicionado com sucesso!');
+      toast.success('Item adicionado com sucesso!', {
+        icon: '✅',
+        duration: 2000,
+      });
       resetItemForm();
       await loadOrderItems(currentOrder.id);
       // Recarregar ordem atualizada
@@ -282,6 +329,14 @@ const Orders = () => {
       loadOrders();
       loadProducts(); // Recarregar produtos para atualizar estoque
       loadStatistics();
+      
+      // Scroll suave para o novo item adicionado
+      setTimeout(() => {
+        itemsListRef.current?.scrollTo({
+          top: itemsListRef.current.scrollHeight,
+          behavior: 'smooth',
+        });
+      }, 100);
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Erro ao adicionar item');
     }
@@ -383,28 +438,141 @@ const Orders = () => {
     setShowDetailModal(true);
   };
 
+  const handleQuickAction = async (orderId: number, action: string) => {
+    try {
+      setQuickActionLoading(orderId);
+      const response = await api.post(`/orders/${orderId}/quick-action`, { action });
+      toast.success('Status atualizado com sucesso!');
+      loadOrders();
+      loadStatistics();
+      
+      // Atualizar ordem atual se estiver visualizando
+      if (currentOrder?.id === orderId) {
+        setCurrentOrder(response.data);
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Erro ao executar ação');
+    } finally {
+      setQuickActionLoading(null);
+    }
+  };
+
+  const handleAssumeOrder = async (orderId: number) => {
+    try {
+      setQuickActionLoading(orderId);
+      const response = await api.post(`/orders/${orderId}/assume`);
+      toast.success('OS assumida com sucesso!');
+      loadOrders();
+      loadStatistics();
+      
+      // Atualizar ordem atual se estiver visualizando
+      if (currentOrder?.id === orderId) {
+        setCurrentOrder(response.data);
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Erro ao assumir ordem de serviço');
+    } finally {
+      setQuickActionLoading(null);
+    }
+  };
+
+  const handleOpenTransferModal = (order: Order) => {
+    setTransferOrder(order);
+    setShowTransferModal(true);
+  };
+
+  const handleTransferSuccess = () => {
+    loadOrders();
+    loadStatistics();
+    if (currentOrder && transferOrder && currentOrder.id === transferOrder.id) {
+      handleViewDetail(currentOrder.id);
+    }
+  };
+
   const handleDelete = async (id: number) => {
-    if (!confirm('Tem certeza que deseja excluir esta ordem de serviço?')) return;
+    if (!confirm('Tem certeza que deseja excluir esta ordem de serviço?\n\nEsta ação não pode ser desfeita e irá excluir todos os itens, histórico e arquivos vinculados.')) return;
 
     try {
+      toast.loading('Excluindo ordem de serviço...', { id: 'delete-order' });
       await api.delete(`/orders/${id}`);
-      toast.success('Ordem de serviço excluída com sucesso!');
+      toast.success('Ordem de serviço excluída com sucesso!', { id: 'delete-order' });
       loadOrders();
       loadStatistics();
     } catch (error: any) {
-      toast.error('Erro ao excluir ordem de serviço');
+      const errorMessage = error.response?.data?.error || 'Erro ao excluir ordem de serviço';
+      const unpaidCount = error.response?.data?.unpaid_receivables;
+      
+      if (errorMessage.includes('contas a receber') || errorMessage.includes('em aberto')) {
+        // Mensagem com informações detalhadas
+        const detailMessage = unpaidCount 
+          ? `\n\n${unpaidCount === 1 ? '1 conta a receber' : `${unpaidCount} contas a receber`} precisa ser cancelada ou excluída.`
+          : '';
+        
+        toast.error(
+          (t) => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div>{errorMessage}{detailMessage}</div>
+              <button
+                onClick={() => {
+                  navigate('/financeiro?tab=receivables&order_id=' + id);
+                  toast.dismiss(t.id);
+                }}
+                style={{
+                  marginTop: '0.5rem',
+                  padding: '0.5rem 1rem',
+                  backgroundColor: '#f97316',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  alignSelf: 'flex-start',
+                }}
+              >
+                <ExternalLink size={14} />
+                Ir para Contas a Receber
+              </button>
+            </div>
+          ),
+          { 
+            id: 'delete-order',
+            duration: 12000,
+          }
+        );
+      } else if (errorMessage.includes('registros vinculados') || errorMessage.includes('vinculados')) {
+        toast.error(errorMessage, { 
+          id: 'delete-order',
+          duration: 8000
+        });
+      } else {
+        toast.error(errorMessage, { id: 'delete-order' });
+      }
+      
+      console.error('Erro ao excluir ordem de serviço:', error.response?.data || error);
     }
   };
 
   const handleUpdateDiscount = async (orderId: number, discount: number) => {
     try {
+      // Validar no frontend também
+      if (currentOrder && discount > currentOrder.subtotal) {
+        toast.error(`O desconto não pode ser maior que o subtotal (${formatCurrency(currentOrder.subtotal)})`);
+        return;
+      }
+      
       await api.put(`/orders/${orderId}/discount`, { discount });
+      toast.success('Desconto atualizado com sucesso!');
       loadOrders();
       if (currentOrder?.id === orderId) {
         loadOrderItems(orderId);
       }
     } catch (error: any) {
-      toast.error('Erro ao atualizar desconto');
+      const errorMessage = error.response?.data?.error || 'Erro ao atualizar desconto';
+      toast.error(errorMessage);
     }
   };
 
@@ -499,13 +667,63 @@ const Orders = () => {
     return null;
   }, [itemFormData.product_id, itemFormData.quantity, products]);
 
-  // Filtrar e paginar ordens
+  // Ordenar ordens
+  const handleSort = (field: keyof Order) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  // Filtrar, ordenar e paginar ordens
   const filteredOrders = useMemo(() => {
-    return orders.filter(() => {
-      // Filtros locais podem ser adicionados aqui
-      return true;
-    });
-  }, [orders, filters]);
+    let filtered = orders;
+
+    // Filtro por status
+    if (statusFilter) {
+      filtered = filtered.filter(order => order.status === statusFilter);
+    }
+
+    // Filtro por busca (já está sendo feito no backend com debouncedSearch)
+    // Mantido aqui para compatibilidade com filtros locais se necessário
+
+    // Filtros avançados
+    if (filters.client_id) {
+      filtered = filtered.filter(order => order.client_id === parseInt(filters.client_id));
+    }
+
+    // Ordenação
+    if (sortField) {
+      filtered = [...filtered].sort((a, b) => {
+        const aValue = a[sortField];
+        const bValue = b[sortField];
+        
+        if (aValue === undefined || aValue === null) return 1;
+        if (bValue === undefined || bValue === null) return -1;
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortDirection === 'asc' 
+            ? aValue.localeCompare(bValue, 'pt-BR')
+            : bValue.localeCompare(aValue, 'pt-BR');
+        }
+        
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+        }
+        
+        return 0;
+      });
+    } else {
+      // Ordenação padrão: mais recentes primeiro
+      filtered = [...filtered].sort((a, b) => {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+    }
+
+    return filtered;
+  }, [orders, filters, statusFilter, sortField, sortDirection]);
 
   const paginatedOrders = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -692,8 +910,9 @@ const Orders = () => {
 
       {/* Filters */}
       <div style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-          <div style={{ position: 'relative', flex: 1, minWidth: '250px', maxWidth: '400px' }}>
+        {/* Busca */}
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ position: 'relative', maxWidth: '500px' }}>
             <Search
               size={20}
               style={{
@@ -709,34 +928,67 @@ const Orders = () => {
               placeholder="Buscar por número, cliente ou placa..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '0.75rem 1rem 0.75rem 2.5rem',
-              border: '1px solid #e2e8f0',
-              borderRadius: '8px',
-              fontSize: '0.9rem',
-              outline: 'none',
-            }}
+              style={{
+                width: '100%',
+                padding: '0.75rem 1rem 0.75rem 2.5rem',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                fontSize: '0.9rem',
+                outline: 'none',
+              }}
             />
           </div>
-          <select
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            style={{
-              padding: '0.75rem 1rem',
-              border: '1px solid #e2e8f0',
-              borderRadius: '8px',
-              fontSize: '0.9rem',
-              cursor: 'pointer',
-            }}
-          >
-            <option value="">Todos os status</option>
-            <option value="open">Aberta</option>
-            <option value="in_progress">Em Andamento</option>
-            <option value="waiting_parts">Aguardando Peças</option>
-            <option value="finished">Finalizada</option>
-            <option value="cancelled">Cancelada</option>
-          </select>
+        </div>
+
+        {/* Filtros rápidos por status */}
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.75rem', fontWeight: '500' }}>
+            Filtrar por Status:
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <OrderStatusChip
+              status="open"
+              onClick={() => setStatusFilter(statusFilter === 'open' ? '' : 'open')}
+              active={statusFilter === 'open'}
+            />
+            <OrderStatusChip
+              status="in_progress"
+              onClick={() => setStatusFilter(statusFilter === 'in_progress' ? '' : 'in_progress')}
+              active={statusFilter === 'in_progress'}
+            />
+            <OrderStatusChip
+              status="waiting_parts"
+              onClick={() => setStatusFilter(statusFilter === 'waiting_parts' ? '' : 'waiting_parts')}
+              active={statusFilter === 'waiting_parts'}
+            />
+            <OrderStatusChip
+              status="finished"
+              onClick={() => setStatusFilter(statusFilter === 'finished' ? '' : 'finished')}
+              active={statusFilter === 'finished'}
+            />
+            <OrderStatusChip
+              status="cancelled"
+              onClick={() => setStatusFilter(statusFilter === 'cancelled' ? '' : 'cancelled')}
+              active={statusFilter === 'cancelled'}
+            />
+            {statusFilter && (
+              <button
+                onClick={() => setStatusFilter('')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  backgroundColor: '#f1f5f9',
+                  color: '#64748b',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                }}
+              >
+                Limpar Filtro
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Advanced Filters */}
@@ -760,39 +1012,100 @@ const Orders = () => {
         />
       </div>
 
-      {/* Table */}
-      <div
-        style={{
-          backgroundColor: 'white',
-          borderRadius: '12px',
-          boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-          overflow: 'hidden',
-        }}
-      >
-        {loading ? (
-          <SkeletonLoader type="table" />
-        ) : filteredOrders.length === 0 ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
-            Nenhuma ordem de serviço encontrada
-          </div>
-        ) : (
+      {/* Orders List - Cards para mobile, Table para desktop */}
+      {loading ? (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1rem' }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonLoader key={i} type="card" />
+          ))}
+        </div>
+      ) : filteredOrders.length === 0 ? (
+        <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b', backgroundColor: 'white', borderRadius: '12px' }}>
+          <FileText size={48} color="#cbd5e1" style={{ margin: '0 auto 1rem' }} />
+          <p style={{ fontSize: '1rem', fontWeight: '500', marginBottom: '0.5rem' }}>Nenhuma ordem de serviço encontrada</p>
+          <p style={{ fontSize: '0.875rem' }}>Tente ajustar os filtros ou criar uma nova OS</p>
+        </div>
+      ) : isMobile ? (
+        // Layout de Cards para Mobile
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {paginatedOrders.map((order) => (
+            <OrderCard
+              key={order.id}
+              order={order}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onView={handleViewDetail}
+              onViewItems={handleViewItems}
+              onQuickAction={handleQuickAction}
+              onAssume={handleAssumeOrder}
+              onTransfer={handleOpenTransferModal}
+              currentUserId={user?.id}
+              currentUserProfile={user?.profile}
+              formatCurrency={formatCurrency}
+              getStatusLabel={getStatusLabel}
+              loading={quickActionLoading === order.id}
+            />
+          ))}
+        </div>
+      ) : (
+        // Layout de Table para Desktop
+        <div
+          style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
+            overflow: 'hidden',
+          }}
+        >
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
-                  Número
+                <th 
+                  style={{ padding: '1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#64748b', cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('order_number')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    Número
+                    {sortField === 'order_number' && (
+                      sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                    )}
+                  </div>
                 </th>
-                <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
-                  Cliente / Veículo
+                <th 
+                  style={{ padding: '1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#64748b', cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('client_name')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    Cliente / Veículo
+                    {sortField === 'client_name' && (
+                      sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                    )}
+                  </div>
                 </th>
                 <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
                   Mecânico
                 </th>
-                <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
-                  Status
+                <th 
+                  style={{ padding: '1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#64748b', cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('status')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    Status
+                    {sortField === 'status' && (
+                      sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                    )}
+                  </div>
                 </th>
-                <th style={{ padding: '1rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
-                  Total
+                <th 
+                  style={{ padding: '1rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: '600', color: '#64748b', cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('total')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                    Total
+                    {sortField === 'total' && (
+                      sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                    )}
+                  </div>
                 </th>
                 <th style={{ padding: '1rem', textAlign: 'center', fontSize: '0.875rem', fontWeight: '600', color: '#64748b' }}>
                   Ações
@@ -850,7 +1163,57 @@ const Orders = () => {
                     </div>
                   </td>
                   <td style={{ padding: '1rem', color: '#64748b', fontSize: '0.875rem' }}>
-                    {order.mechanic_name || '-'}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div>{order.mechanic_name || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Sem mecânico</span>}</div>
+                      {(user?.profile === 'admin' || user?.profile === 'mechanic' || user?.profile === 'attendant') && order.status !== 'finished' && order.status !== 'cancelled' && (
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          {(!order.mechanic_id || order.mechanic_id !== user?.id) && (user?.profile === 'admin' || user?.profile === 'mechanic') && (
+                            <button
+                              onClick={() => handleAssumeOrder(order.id)}
+                              disabled={quickActionLoading === order.id}
+                              style={{
+                                padding: '0.375rem 0.75rem',
+                                backgroundColor: '#e0e7ff',
+                                border: 'none',
+                                borderRadius: '6px',
+                                cursor: quickActionLoading === order.id ? 'not-allowed' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                fontSize: '0.75rem',
+                                fontWeight: '500',
+                                color: '#6366f1',
+                                opacity: quickActionLoading === order.id ? 0.5 : 1,
+                              }}
+                              title="Assumir OS"
+                            >
+                              <UserCheck size={14} />
+                              Assumir
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleOpenTransferModal(order)}
+                            style={{
+                              padding: '0.375rem 0.75rem',
+                              backgroundColor: '#fef3c7',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.25rem',
+                              fontSize: '0.75rem',
+                              fontWeight: '500',
+                              color: '#f59e0b',
+                            }}
+                            title="Transferir OS"
+                          >
+                            <ArrowRightLeft size={14} />
+                            Transferir
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td style={{ padding: '1rem' }}>
                     <span
@@ -870,7 +1233,7 @@ const Orders = () => {
                     {formatCurrency(order.total)}
                   </td>
                   <td style={{ padding: '1rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', alignItems: 'center' }}>
                       <button
                         onClick={() => handleViewDetail(order.id)}
                         style={{
@@ -935,16 +1298,35 @@ const Orders = () => {
                       >
                         <Trash2 size={16} color="#ef4444" />
                       </button>
+                      <QuickActionsMenu
+                        order={order}
+                        onAction={handleQuickAction}
+                        loading={quickActionLoading === order.id}
+                      />
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        )}
+          {/* Pagination para Desktop */}
+          {!loading && filteredOrders.length > 0 && (
+            <div style={{ padding: '1rem', borderTop: '1px solid #e2e8f0' }}>
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                totalItems={filteredOrders.length}
+                itemsPerPage={itemsPerPage}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
-        {/* Pagination */}
-        {!loading && filteredOrders.length > 0 && (
+      {/* Pagination para Mobile */}
+      {!loading && filteredOrders.length > 0 && isMobile && (
+        <div style={{ marginTop: '1rem' }}>
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
@@ -952,8 +1334,8 @@ const Orders = () => {
             totalItems={filteredOrders.length}
             itemsPerPage={itemsPerPage}
           />
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Modal OS */}
       {showModal && (
@@ -1028,57 +1410,44 @@ const Orders = () => {
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
                   Cliente *
                 </label>
-                <select
+                <SearchableSelect
+                  options={clients.map(client => ({
+                    value: client.id.toString(),
+                    label: client.name,
+                  }))}
                   value={formData.client_id}
-                  onChange={(e) => {
-                    setFormData({ ...formData, client_id: e.target.value, vehicle_id: '' });
-                    if (e.target.value) {
-                      loadVehicles(parseInt(e.target.value));
+                  onChange={(value) => {
+                    setFormData({ ...formData, client_id: value, vehicle_id: '' });
+                    if (value) {
+                      loadVehicles(parseInt(value));
+                    } else {
+                      setVehicles([]);
                     }
                   }}
+                  placeholder="Selecione um cliente"
                   required
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                    fontSize: '0.9rem',
-                  }}
-                >
-                  <option value="">Selecione um cliente</option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                    </option>
-                  ))}
-                </select>
+                  searchPlaceholder="Buscar cliente..."
+                  emptyMessage="Nenhum cliente encontrado"
+                />
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
                   Veículo *
                 </label>
-                <select
+                <SearchableSelect
+                  options={vehicles.map(vehicle => ({
+                    value: vehicle.id.toString(),
+                    label: `${vehicle.brand} ${vehicle.model}${vehicle.plate ? ` - ${vehicle.plate}` : ''}`,
+                  }))}
                   value={formData.vehicle_id}
-                  onChange={(e) => setFormData({ ...formData, vehicle_id: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, vehicle_id: value })}
+                  placeholder="Selecione um veículo"
                   required
                   disabled={!formData.client_id}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                    fontSize: '0.9rem',
-                    opacity: formData.client_id ? 1 : 0.6,
-                  }}
-                >
-                  <option value="">Selecione um veículo</option>
-                  {vehicles.map((vehicle) => (
-                    <option key={vehicle.id} value={vehicle.id}>
-                      {vehicle.brand} {vehicle.model} {vehicle.plate && `- ${vehicle.plate}`}
-                    </option>
-                  ))}
-                </select>
+                  searchPlaceholder="Buscar veículo..."
+                  emptyMessage={formData.client_id ? "Nenhum veículo encontrado" : "Selecione um cliente primeiro"}
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
@@ -1113,15 +1482,24 @@ const Orders = () => {
                     step="0.01"
                     min="0"
                     value={formData.discount}
-                    onChange={(e) => setFormData({ ...formData, discount: e.target.value })}
+                    onChange={(e) => {
+                      const value = parseFloat(e.target.value) || 0;
+                      setFormData({ ...formData, discount: e.target.value });
+                    }}
                     style={{
                       width: '100%',
                       padding: '0.75rem',
-                      border: '1px solid #e2e8f0',
+                      border: parseFloat(formData.discount) < 0 ? '2px solid #ef4444' : '1px solid #e2e8f0',
                       borderRadius: '8px',
                       fontSize: '0.9rem',
+                      transition: 'border-color 0.2s',
                     }}
                   />
+                  {parseFloat(formData.discount) < 0 && (
+                    <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#ef4444' }}>
+                      Desconto não pode ser negativo
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1206,6 +1584,7 @@ const Orders = () => {
           }}
         >
           <div
+            ref={itemModalRef}
             style={{
               backgroundColor: 'white',
               borderRadius: '12px',
@@ -1216,6 +1595,20 @@ const Orders = () => {
               overflowY: 'auto',
             }}
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              // Atalhos de teclado no modal de itens
+              if (e.key === 'Escape' && !editingItem) {
+                setShowItemModal(false);
+                setCurrentOrder(null);
+                setOrderItems([]);
+                resetItemForm();
+              }
+              if (e.key === 'Enter' && e.ctrlKey && !editingItem && itemFormData.description && itemTotal > 0) {
+                e.preventDefault();
+                handleAddItem(e as any);
+              }
+            }}
+            tabIndex={-1}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <div>
@@ -1261,7 +1654,22 @@ const Orders = () => {
                   Total: {formatCurrency(itemTotal)}
                 </div>
               </div>
-              <form onSubmit={handleSubmitItem}>
+              <form 
+                onSubmit={handleSubmitItem}
+                onKeyDown={(e) => {
+                  // Atalho: Ctrl+Enter para adicionar item
+                  if (e.key === 'Enter' && e.ctrlKey && !editingItem) {
+                    e.preventDefault();
+                    if (itemFormData.description && itemTotal > 0) {
+                      handleAddItem(e);
+                    }
+                  }
+                  // Atalho: Escape para cancelar edição
+                  if (e.key === 'Escape' && editingItem) {
+                    resetItemForm();
+                  }
+                }}
+              >
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginBottom: '1rem' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
@@ -1373,11 +1781,17 @@ const Orders = () => {
                       style={{
                         width: '100%',
                         padding: '0.75rem',
-                        border: '1px solid #e2e8f0',
+                        border: !itemFormData.description.trim() && itemFormData.description !== '' ? '2px solid #ef4444' : '1px solid #e2e8f0',
                         borderRadius: '8px',
                         fontSize: '0.9rem',
+                        transition: 'border-color 0.2s',
                       }}
                     />
+                    {!itemFormData.description.trim() && itemFormData.description !== '' && (
+                      <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#ef4444' }}>
+                        Descrição é obrigatória
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
@@ -1396,11 +1810,17 @@ const Orders = () => {
                       style={{
                         width: '100%',
                         padding: '0.75rem',
-                        border: '1px solid #e2e8f0',
+                        border: parseFloat(itemFormData.quantity) <= 0 ? '2px solid #ef4444' : '1px solid #e2e8f0',
                         borderRadius: '8px',
                         fontSize: '0.9rem',
+                        transition: 'border-color 0.2s',
                       }}
                     />
+                    {parseFloat(itemFormData.quantity) <= 0 && itemFormData.quantity !== '' && (
+                      <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#ef4444' }}>
+                        Quantidade deve ser maior que zero
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: '600' }}>
@@ -1419,11 +1839,17 @@ const Orders = () => {
                       style={{
                         width: '100%',
                         padding: '0.75rem',
-                        border: '1px solid #e2e8f0',
+                        border: parseFloat(itemFormData.unit_price) <= 0 ? '2px solid #ef4444' : '1px solid #e2e8f0',
                         borderRadius: '8px',
                         fontSize: '0.9rem',
+                        transition: 'border-color 0.2s',
                       }}
                     />
+                    {parseFloat(itemFormData.unit_price) <= 0 && itemFormData.unit_price !== '' && (
+                      <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#ef4444' }}>
+                        Preço deve ser maior que zero
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
                     <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.75rem', color: '#64748b', fontWeight: '500' }}>
@@ -1456,9 +1882,19 @@ const Orders = () => {
                         cursor: (!itemFormData.description || itemTotal <= 0) ? 'not-allowed' : 'pointer',
                         fontWeight: '600',
                         transition: 'background-color 0.2s',
+                        position: 'relative',
                       }}
+                      title={editingItem ? 'Salvar alterações (Ctrl+Enter)' : 'Adicionar item (Ctrl+Enter)'}
                     >
                       {editingItem ? 'Salvar Alterações' : 'Adicionar'}
+                      <span style={{ 
+                        fontSize: '0.75rem', 
+                        opacity: 0.8, 
+                        marginLeft: '0.5rem',
+                        fontWeight: 'normal',
+                      }}>
+                        (Ctrl+Enter)
+                      </span>
                     </button>
                     {editingItem && (
                       <button
@@ -1497,7 +1933,7 @@ const Orders = () => {
                   Nenhum item adicionado. Use o formulário acima para adicionar produtos ou serviços.
                 </div>
               ) : (
-                <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                <div ref={itemsListRef} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', maxHeight: '400px', overflowY: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
@@ -1622,17 +2058,45 @@ const Orders = () => {
                     type="number"
                     step="0.01"
                     min="0"
+                    max={currentOrder.subtotal}
                     value={currentOrder.discount}
-                    onChange={(e) => handleUpdateDiscount(currentOrder.id, parseFloat(e.target.value) || 0)}
+                    onChange={(e) => {
+                      const value = parseFloat(e.target.value) || 0;
+                      if (value <= currentOrder.subtotal) {
+                        handleUpdateDiscount(currentOrder.id, value);
+                      }
+                    }}
                     style={{
                       width: '120px',
                       padding: '0.5rem',
-                      border: '1px solid #e2e8f0',
+                      border: currentOrder.discount > currentOrder.subtotal ? '2px solid #ef4444' : '1px solid #e2e8f0',
                       borderRadius: '6px',
                       fontSize: '0.875rem',
                       textAlign: 'right',
                     }}
                   />
+                  {currentOrder.discount > 0 && (
+                    <button
+                      onClick={() => handleUpdateDiscount(currentOrder.id, 0)}
+                      style={{
+                        padding: '0.25rem 0.5rem',
+                        backgroundColor: '#fee2e2',
+                        color: '#ef4444',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        fontWeight: '600',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                      }}
+                      title="Remover desconto"
+                    >
+                      <X size={12} />
+                      Limpar
+                    </button>
+                  )}
                 </div>
               </div>
               <div style={{ 
@@ -1665,6 +2129,20 @@ const Orders = () => {
             loadOrders();
             loadStatistics();
           }}
+        />
+      )}
+
+      {/* Modal Transferir OS */}
+      {showTransferModal && transferOrder && (
+        <TransferOrderModal
+          orderId={transferOrder.id}
+          orderNumber={transferOrder.order_number}
+          currentMechanicName={transferOrder.mechanic_name}
+          onClose={() => {
+            setShowTransferModal(false);
+            setTransferOrder(null);
+          }}
+          onSuccess={handleTransferSuccess}
         />
       )}
     </div>

@@ -12,7 +12,7 @@ Sistema completo de ERP para oficinas mecânicas, desenvolvido com arquitetura m
 - 🏢 **Cadastro de Fornecedores** - Gestão de fornecedores e produtos
 - 🚗 **Cadastro de Veículos** - Controle completo de veículos dos clientes
 - 📦 **Controle de Estoque** - Gestão de produtos/peças com alertas e movimentações
-- 📋 **Ordens de Serviço** - Criação, gestão e rastreamento completo de OS com cálculo automático, validações e controle de estoque aprimorado
+- 📋 **Ordens de Serviço** - Criação, gestão e rastreamento completo de OS com cálculo automático, validações, controle de estoque aprimorado, gestão inteligente de desconto e exclusão com validação de contas a receber
 - 💳 **Financeiro Completo** - Contas a pagar/receber e fluxo de caixa
 - 📅 **Agendamento** - Sistema de agendamento com calendário interativo
 - 📊 **Relatórios** - Dashboard e relatórios gerenciais com gráficos
@@ -76,6 +76,7 @@ make down
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:3002/api
 - **PostgreSQL**: localhost:5433
+- **pgAdmin**: http://localhost:5050 (Email: admin@autopro.com, Senha: admin123)
 
 ### Credenciais Padrão
 
@@ -161,7 +162,18 @@ make migrate       # Executa migrations
 make backup        # Backup do banco
 make shell-backend # Shell no backend
 make shell-db      # Shell no banco
+make pgadmin       # Mostra informações do pgAdmin
 ```
+
+### Acessar o Banco de Dados via pgAdmin
+
+O pgAdmin está disponível na porta **5050**:
+
+1. Acesse: **http://localhost:5050**
+2. Login: `admin@autopro.local` / `admin123`
+3. Adicione servidor: Host `postgres`, Port `5432`, Database `mec_poa`, User `postgres`, Password `postgres`
+
+Veja o guia completo em [PGADMIN_GUIDE.md](./PGADMIN_GUIDE.md)
 
 ## 🔒 Segurança
 
@@ -204,8 +216,16 @@ make shell-db      # Shell no banco
 - [Modelagem do Banco](./docs/database/SCHEMA.md) - Schema completo
 - [API Documentation](./docs/api/API.md) - Documentação da API
 - [Módulo de Ordens de Serviço](./docs/ORDERS_MODULE.md) - Documentação completa do módulo de OS
+- [Evoluções Implementadas](./docs/EVOLUCOES_IMPLEMENTADAS.md) - Lista completa de melhorias implementadas
+- [Melhorias Janeiro 2025](./docs/MELHORIAS_DESCONTO_E_EXCLUSAO.md) - Gestão de desconto e exclusão de ordens
+- [Resumo Melhorias Janeiro 2025](./docs/RESUMO_MELHORIAS_JANEIRO_2025.md) - Resumo executivo das melhorias
+- [Melhorias de UX e Fluxo (v1.3.0)](./docs/SESSAO_MELHORIAS_UX_E_FLUXO.md) - **NOVO** - Melhorias de UX e fluxo automatizado
+- [Guia pgAdmin](./PGADMIN_GUIDE.md) - **NOVO** - Guia completo do pgAdmin para acesso ao banco
+- [Fluxo Orçamento → OS](./FLUXO_ORCAMENTO_OS.md) - **NOVO** - Documentação do fluxo automatizado
 - [Evoluções Sugeridas](./docs/EVOLUCOES_SUGERIDAS.md) - Análise completa de melhorias e novas funcionalidades
 - [Guia de Deploy](./docs/deployment/DEPLOY.md) - Deploy em produção
+- [CHANGELOG](./CHANGELOG.md) - Histórico de mudanças
+- [Índice de Documentação](./docs/INDICE_DOCUMENTACAO.md) - Índice completo de toda documentação
 
 ## 🎨 Interface
 

@@ -45,6 +45,11 @@ shell-backend: ## Abre shell no container do backend
 shell-db: ## Abre psql no banco de dados
 	docker exec -it mec-poa-db psql -U postgres -d mec_poa
 
+pgadmin: ## Abre pgAdmin no navegador (depois de fazer 'make up')
+	@echo "pgAdmin disponível em: http://localhost:5050"
+	@echo "Email: admin@autopro.com"
+	@echo "Senha: admin123"
+
 backup: ## Cria backup do banco
 	docker exec mec-poa-db pg_dump -U postgres mec_poa > backup_$$(date +%Y%m%d_%H%M%S).sql
 	@echo "Backup criado: backup_$$(date +%Y%m%d_%H%M%S).sql"

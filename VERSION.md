@@ -2,9 +2,9 @@
 
 **Sistema de Gestão para Oficina Mecânica**
 
-## Versão Atual: 1.0.0
+## Versão Atual: 1.3.0
 
-**Data da Última Atualização**: 20/12/2024
+**Data da Última Atualização**: Janeiro 2025
 
 ---
 
@@ -29,7 +29,17 @@
 
 ## 🔄 Histórico de Atualizações
 
-### 2024-12-20
+### Janeiro 2025 - Versão 1.3.0
+- Melhorias significativas de UX no módulo de Ordens de Serviço
+- Fluxo automatizado de aprovação de orçamentos (criação automática de OS)
+- Dashboard do mecânico melhorado com lista clicável de próximas OS
+- pgAdmin configurado para acesso web ao banco de dados
+- Componentes reutilizáveis criados (useDebounce, SearchableSelect)
+- Validação em tempo real implementada
+- Atalhos de teclado adicionados
+- Documentação completa atualizada
+
+### 2024-12-20 - Versão 1.0.0
 - TypeScript atualizado para 5.9.3
 - lucide-react atualizado para 0.562.0
 - react-hook-form atualizado para 7.69.0

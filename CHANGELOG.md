@@ -3,54 +3,138 @@
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
-e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
-## [Não Versionado] - 2024-12-20
+## [1.3.0] - 2025-01-XX
+
+### 🎯 Versão: Melhorias de UX, Fluxo Automatizado e pgAdmin
 
 ### ✨ Adicionado
-- Documentação completa de análise de atualizações (`docs/ANALISE_ATUALIZACOES.md`)
-- Resumo executivo de atualizações (`docs/RESUMO_ATUALIZACOES.md`)
+- **Componentes Reutilizáveis**
+  - Hook `useDebounce` para debounce genérico
+  - Componente `SearchableSelect` com busca integrada
+  - Aplicado em selects de Cliente e Veículo
 
-### 🔄 Atualizado
-- **TypeScript**: `5.3.3` → `5.9.3` (backend e frontend)
-- **lucide-react**: `0.303.0` → `0.562.0` (novos ícones disponíveis)
-- **react-hook-form**: `7.49.2` → `7.69.0` (patch update)
+- **Melhorias de UX no Módulo de Ordens de Serviço**
+  - Debounce na busca (300ms) para melhor performance
+  - Selects com busca para clientes e veículos
+  - Atalhos de teclado (Ctrl+Enter para adicionar, Esc para fechar)
+  - Ordenação por colunas na tabela (Número, Cliente, Status, Total)
+  - Validação em tempo real com feedback visual
+  - Scroll automático ao adicionar itens
+  - Toasts com ícones e animações suaves
+
+- **Fluxo Automatizado de Aprovação de Orçamentos**
+  - Criação automática de OS quando orçamento é aprovado
+  - Atribuição automática do mecânico à OS
+  - Cópia automática de itens do orçamento para OS
+  - Cálculo automático de totais
+  - Atualização automática de status (approved → converted)
+
+- **Melhorias no Dashboard do Mecânico**
+  - Seção "Próximas OS" clicável
+  - Lista mostra informações completas (cliente, veículo, status, valor)
+  - Navegação direta: clicar na OS abre modal de detalhes
+  - Mostra data de agendamento quando disponível
+
+- **Melhorias na Agenda**
+  - Nome do mecânico visível na listagem de agendamentos
+
+- **pgAdmin Configurado**
+  - Serviço pgAdmin adicionado ao Docker Compose
+  - Interface web para gerenciar banco de dados PostgreSQL
+  - Porta 5050 configurada
+  - Documentação completa criada (3 guias)
+
+### 🔧 Melhorado
+- Validação no endpoint de aprovação de orçamentos
+- Mensagens de erro mais claras e específicas
+- Tratamento de erros no frontend e backend
+- Performance da busca com debounce
+- Experiência do usuário em formulários
+- Dashboard do mecânico mais útil e interativo
 
 ### 🐛 Corrigido
-- Corrigidos checks de `result.rowCount` para suportar valores `null` (null coalescing)
-- Corrigidos erros de tipo TypeScript em controllers (`auth.controller`, `quote.controller`, `order.controller`)
-- Corrigidos parâmetros não utilizados em funções (prefixados com `_`)
-- Removidos imports não utilizados
-- Corrigidos erros de tipo em componentes frontend (`Orders.tsx`, `Quotes.tsx`, `Users.tsx`)
-- Removidas declarações duplicadas de funções
+- Nome do mecânico não aparecia na Agenda
+- Dashboard do mecânico não mostrava OS para interação
+- OS não era criada automaticamente ao aprovar orçamento
+- Email do pgAdmin corrigido (de .local para .com)
 
-### 🔧 Técnico
-- Melhorias de type safety com TypeScript 5.9.x
-- Correções de compatibilidade com versões atualizadas das dependências
-- Ajustes para seguir padrões mais rigorosos do TypeScript
+### 📚 Documentação
+- `PGADMIN_GUIDE.md` - Guia completo do pgAdmin
+- `PGADMIN_CONFIG_RAPIDA.md` - Guia rápido de configuração
+- `RESUMO_PGADMIN.md` - Resumo executivo
+- `FLUXO_ORCAMENTO_OS.md` - Documentação do fluxo completo
+- `docs/SESSAO_MELHORIAS_UX_E_FLUXO.md` - Documentação completa da sessão
+- README.md atualizado com informações do pgAdmin
+- Makefile atualizado com comando `make pgadmin`
+
+## [1.2.0] - 2025-01-XX
+
+### 🎯 Versão: Gestão Inteligente e Melhorias de UX
+
+### ✨ Adicionado
+- **Gestão Inteligente de Desconto**
+  - Zeramento automático de desconto quando não há itens na ordem
+  - Validações robustas no frontend e backend
+  - Botão "Limpar" para remover desconto manualmente
+  - Prevenção de totais negativos
+
+- **Melhoria na Exclusão de Ordens**
+  - Mensagens de erro detalhadas e acionáveis
+  - Botão "Ir para Contas a Receber" na mensagem de erro
+  - Navegação automática para página financeira com filtro
+  - Filtro de contas a receber por ordem de serviço
+  - Destaque visual de contas vinculadas
+
+### 🔧 Melhorado
+- Validação de desconto em múltiplas camadas
+- Feedback visual imediato em campos inválidos
+- Processo de resolução de bloqueios de exclusão
+- Experiência do usuário na gestão financeira
+
+### 🐛 Corrigido
+- Desconto permanecendo após exclusão de todos os itens
+- Totais negativos quando desconto maior que subtotal
+- Mensagens de erro genéricas ao excluir ordens
+- Dificuldade para encontrar contas a receber vinculadas
+
+### 📚 Documentação
+- Documentação completa das melhorias de desconto
+- Documentação de melhoria na exclusão de ordens
+- Atualização do README.md
+- Atualização de EVOLUCOES_IMPLEMENTADAS.md
+
+## [1.1.0] - 2024-12-XX
+
+### ✨ Adicionado
+- QR Code na impressão de OS em PDF
+- Sistema completo de garantias
+- Criação de garantias em lote
+- Integração ViaCEP (confirmada)
+
+### 🔧 Melhorado
+- Layout de PDF de OS
+- Histórico de alterações de OS
+- Controle de garantias
+
+## [1.0.0] - 2024-XX-XX
+
+### ✨ Adicionado
+- Sistema completo de gestão para oficina mecânica
+- Módulos: Clientes, Veículos, Fornecedores, Estoque, OS, Financeiro, Agendamento, Relatórios
+- Autenticação e controle de acesso
+- Dashboard com KPIs
+- Sistema de garantias
+- Integração com estoque
+- Geração automática de contas a receber
 
 ---
 
-## [Versões Anteriores]
-
-### Funcionalidades Principais Implementadas
-
-- ✅ Sistema completo de autenticação e autorização
-- ✅ Dashboard com KPIs e gráficos em tempo real
-- ✅ CRUD completo de Clientes, Veículos, Fornecedores, Produtos
-- ✅ Sistema de Ordens de Serviço com cálculo automático e controle de estoque
-- ✅ Sistema Financeiro (Contas a Pagar/Receber, Parcelas, Fluxo de Caixa)
-- ✅ Sistema de Garantias
-- ✅ Agendamento de Serviços
-- ✅ Relatórios e Dashboard Gerencial
-- ✅ Sistema de Templates de OS
-- ✅ Sistema de Checklists para Mecânicos
-- ✅ Sistema de Orçamentos com conversão para OS
-- ✅ Assinatura Digital do Cliente em OS
-- ✅ Upload de Fotos/Documentos em OS
-- ✅ Exportação de PDFs para OS e Orçamentos
-- ✅ Histórico completo de veículos e clientes
-
----
-
-**Nota**: Para informações detalhadas sobre cada funcionalidade, consulte `docs/EVOLUCOES_SUGERIDAS.md` e `STATUS.md`.
+**Formato:**
+- `✨ Adicionado` - Novas funcionalidades
+- `🔧 Melhorado` - Mudanças em funcionalidades existentes
+- `🐛 Corrigido` - Correções de bugs
+- `🗑️ Removido` - Funcionalidades removidas
+- `🔒 Segurança` - Correções de segurança
+- `📚 Documentação` - Mudanças na documentação

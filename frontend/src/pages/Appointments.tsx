@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Calendar, Clock, User, Car, CheckCircle, XCircle, Play } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { Plus, Search, Edit, Trash2, Calendar, Clock, User, Car, CheckCircle, XCircle, Play, Wrench } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
@@ -37,6 +38,7 @@ interface Vehicle {
 }
 
 const Appointments = () => {
+  const location = useLocation();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -64,6 +66,22 @@ const Appointments = () => {
     loadAppointments();
     loadClients();
   }, [selectedStatus, selectedDate, viewMode]);
+
+  // Recarregar agendamentos quando a página receber foco (útil após criar agendamento de outra página)
+  useEffect(() => {
+    const handleFocus = () => {
+      loadAppointments(); // Recarregar quando a janela receber foco
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
+  // Recarregar quando navegar para esta página (útil após criar agendamento via aprovação de orçamento)
+  useEffect(() => {
+    if (location.pathname === '/agendamentos') {
+      loadAppointments();
+    }
+  }, [location.pathname]);
 
   const loadAppointments = async () => {
     try {
@@ -487,6 +505,12 @@ const Appointments = () => {
                             <Car size={14} />
                             {appointment.brand} {appointment.model} {appointment.plate && `- ${appointment.plate}`}
                           </div>
+                          {appointment.mechanic_name && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <Wrench size={14} />
+                              {appointment.mechanic_name}
+                            </div>
+                          )}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <Clock size={14} />
                             {formatDateTime(appointment.start_time)}
